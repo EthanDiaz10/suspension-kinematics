@@ -1,0 +1,10 @@
+{
+	"autodeskProduct": "Fusion",
+	"type": "script",
+	"author": "EthanDiaz10",
+	"description": {
+		"": "Builds a double-wishbone corner (master sketch, tubes, joints) from suspkin hardpoints or poses JSON and exports STEP."
+	},
+	"supportedOS": "windows|mac",
+	"editEnabled": true
+}

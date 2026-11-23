@@ -2,7 +2,7 @@
 
 A personal simulation, analysis and design project: a parametric
 **double-wishbone suspension kinematics solver** in Python, with an Autodesk
-Fusion script (planned) that draws the result in CAD. The reference geometry
+Fusion script that builds the result in CAD and exports STEP. The reference geometry
 uses Formula SAE-sized dimensions because they are well documented and
 realistic for a small open-wheel car.
 
@@ -64,11 +64,11 @@ sk.plot_sweep(metrics, "my_change.png")
 | `data/` | Hardpoint sets and optimiser settings as JSON. Copy the baseline to start a new design |
 | `tests/` | `pytest` checks (link lengths preserved, sign conventions, rim clashes, optimiser) |
 | `notebooks/` | Jupyter notebooks for exploring designs |
-| `cad/fusion/` | Fusion script that reads solver output (Phase 3) |
+| `cad/fusion/` | Fusion script that builds the sketch, tubes and joints from solver output and exports STEP ([how to run it](cad/fusion/README.md)) |
 | `docs/images/` | Plots used in this README |
 
-The solver and the CAD script only talk through files (`*_poses.json`), so
-each can change without breaking the other.
+The solver and the CAD script only talk through JSON files (hardpoints or
+`*_poses.json`), so each can change without breaking the other.
 
 ## Conventions
 
@@ -169,6 +169,14 @@ fixed roll centre "drops" 1 mm per mm of bump, which is why the
   lower one is the only joint that can move, and lowering it fights the RC
   goal. The weights decide where that balance lands.
 
+## CAD model in Fusion (Phase 3)
+
+`cad/fusion/SuspensionModel/` is a Fusion script. Point it at
+`data/optimized_front.json` (or a `*_poses.json` sweep, at any wheel travel)
+and it opens a new design with a master 3D sketch of every hardpoint and link,
+tubes with ball joints and rod ends, a see-through reference tyre, and writes
+a STEP file. Install and run steps are in [cad/fusion/README.md](cad/fusion/README.md).
+
 ## Working on more than one PC
 
 Git keeps every PC in sync through GitHub. Set up each PC once:
@@ -205,12 +213,12 @@ Tips:
 
 - [x] **Phase 1:** repo scaffold, baseline hardpoints, bump sweep, camber/toe and other metrics, tests
 - [x] **Phase 2:** optimisation, nudging chosen hardpoints to hit targets (camber gain, bump steer, roll centre height and migration) within 10" rim packaging limits
+- [x] **Phase 3:** Fusion script: master 3D sketch, tube solids with ball joints and rod ends, STEP export, from hardpoints or `*_poses.json`
 - [ ] Optimiser goal for scrub radius and mechanical trail
 - [ ] Steering sweep and Ackermann percentage
 - [ ] Pushrod and rocker stage (motion ratio through the rocker)
 - [ ] Anti-dive / anti-squat (side-view geometry)
 - [ ] Roll sweep (left and right corners moving opposite ways)
-- [ ] **Phase 3:** Fusion script that draws the skeleton and tubes from `*_poses.json`
 
 ## License
 
