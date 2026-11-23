@@ -13,11 +13,14 @@ from .export import write_metrics_csv, write_poses_json
 from .hardpoints import Hardpoints, load_hardpoints, save_hardpoints
 from .kinematics import DoubleWishbone, Pose, bump_sweep
 from .metrics import compute_metrics, summary
-from .plotting import plot_front_view, plot_sweep
+from .optimize import OptimizeConfig, optimize
+from .packaging import check_packaging
+from .plotting import plot_comparison, plot_front_view, plot_sweep
 
 __all__ = [
-    "DoubleWishbone", "Hardpoints", "Pose", "bump_sweep", "compute_metrics",
-    "load_hardpoints", "plot_front_view", "plot_sweep", "save_hardpoints",
+    "DoubleWishbone", "Hardpoints", "OptimizeConfig", "Pose", "bump_sweep",
+    "check_packaging", "compute_metrics", "load_hardpoints", "optimize",
+    "plot_comparison", "plot_front_view", "plot_sweep", "save_hardpoints",
     "summary", "write_metrics_csv", "write_poses_json",
 ]
-__version__ = "0.1.0"
+__version__ = "0.2.0"

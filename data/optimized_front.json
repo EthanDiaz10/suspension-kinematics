@@ -1,0 +1,47 @@
+{
+  "name": "Optimised FSAE-style front corner (front-left)",
+  "description": "Output of `suspkin optimize data/baseline_fsae_front.json data/optimize_front.json`. Roll-centre movement vs the chassis cut from -0.38 to -0.05 mm per mm of travel while keeping ball-joint spread and KPI close to the baseline, inside the 10 inch rim envelope.",
+  "units": "mm",
+  "coordinate_system": "SAE/ISO vehicle axes: +X forward, +Y left, +Z up. Origin on the ground plane, on the car centerline, at the front axle line.",
+  "side": "front-left",
+  "packaging": {
+    "_note": "10 inch rim envelope, checked in the wheel's own frame (see solver/suspkin/packaging.py)",
+    "rim_inner_radius_mm": 117.0,
+    "rim_half_width_mm": 89.0,
+    "radial_clearance_mm": 8.0,
+    "hub_face_axial_mm": -20.0,
+    "checked_points": ["UBJ", "LBJ", "RTO", "SHU"]
+  },
+  "point_descriptions": {
+    "UAF": "Upper A-arm, front chassis pivot",
+    "UAA": "Upper A-arm, aft chassis pivot",
+    "LAF": "Lower A-arm, front chassis pivot",
+    "LAA": "Lower A-arm, aft chassis pivot",
+    "RTI": "Tie rod inner end (steering rack)",
+    "SHC": "Spring/damper chassis end (direct-acting placeholder until the pushrod/rocker stage)",
+    "UBJ": "Upper ball joint",
+    "LBJ": "Lower ball joint",
+    "RTO": "Tie rod outer end (steering arm on the upright)",
+    "SHU": "Spring/damper upright end (direct-acting placeholder)",
+    "WC": "Wheel center",
+    "CP": "Tire contact patch center"
+  },
+  "static_camber_deg": -1.0,
+  "static_toe_deg": 0.0,
+  "chassis": {
+    "UAF": [110.0, 290.0, 281.3865],
+    "UAA": [-120.0, 290.0, 271.3865],
+    "LAF": [130.0, 195.003, 119.6114],
+    "LAA": [-130.0, 195.003, 114.6114],
+    "RTI": [65.0, 195.0047, 122.9352],
+    "SHC": [0.0, 300.0, 470.0]
+  },
+  "upright": {
+    "UBJ": [-8.0, 555.0, 335.7599],
+    "LBJ": [5.0, 575.0, 142.5353],
+    "RTO": [68.0, 565.0, 150.0],
+    "SHU": [0.0, 545.0, 145.0],
+    "WC": [0.0, 610.0, 228.0],
+    "CP": [0.0, 610.0, 0.0]
+  }
+}
