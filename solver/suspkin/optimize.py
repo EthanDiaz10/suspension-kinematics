@@ -24,6 +24,10 @@ rc_migration        roll-centre movement RELATIVE TO THE CHASSIS per mm of wheel
 rc_height           static roll-centre height above the ground (mm)
 camber_gain         camber change per 10 mm of bump at ride height (deg/10 mm)
 bump_steer          toe range over the whole sweep (deg). Target 0.
+bj_spread           distance between the upper and lower ball joints (mm).
+                    Closer joints mean higher loads in the arms and joints.
+kpi                 static kingpin inclination (deg). More KPI means more
+                    camber change when steering and heavier steering.
 ==================  ===========================================================
 
 SLSQP is a *local* method: it walks downhill from the starting geometry and
@@ -46,7 +50,7 @@ from .metrics import compute_metrics, rc_migration
 from .packaging import packaging_margins
 
 AXES = {"x": 0, "y": 1, "z": 2}
-GOALS = ("rc_migration", "rc_height", "camber_gain", "bump_steer")
+GOALS = ("rc_migration", "rc_height", "camber_gain", "bump_steer", "bj_spread", "kpi")
 FAILED_SCORE = 1e6  # score for a geometry the solver can't assemble
 
 
@@ -112,6 +116,8 @@ def measure(hp: Hardpoints, travel_mm: float = 50.0, step_mm: float = 10.0) -> d
         "rc_height": float(m["roll_center_height_mm"][i0]),
         "camber_gain": float(10 * np.gradient(m["camber_deg"], t)[i0]),
         "bump_steer": float(np.ptp(m["toe_deg"])),
+        "bj_spread": float(np.linalg.norm(hp.upright["UBJ"] - hp.upright["LBJ"])),
+        "kpi": float(m["kpi_deg"][i0]),
     }
 
 

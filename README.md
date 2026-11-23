@@ -136,10 +136,12 @@ symmetric car.
 
 | Goal | Meaning | Target | Baseline | Optimised |
 |---|---|---|---|---|
-| `rc_migration` | roll-centre movement relative to the chassis, per mm of travel | 0 | −0.38 | −0.006 |
-| `rc_height` | static roll-centre height (mm) | 30 | 28.8 | 27.2 |
-| `camber_gain` | camber change per 10 mm of bump (deg) | −0.40 | −0.37 | −0.42 |
-| `bump_steer` | toe change over ±50 mm (deg) | 0 | 0.009 | 0.020 |
+| `rc_migration` | roll-centre movement relative to the chassis, per mm of travel | 0 | −0.38 | −0.05 |
+| `rc_height` | static roll-centre height (mm) | 30 | 28.8 | 28.0 |
+| `camber_gain` | camber change per 10 mm of bump (deg) | −0.40 | −0.37 | −0.45 |
+| `bump_steer` | toe change over ±50 mm (deg) | 0 | 0.009 | 0.019 |
+| `bj_spread` | distance between the ball joints (mm), for joint and arm loads | 210 | 211 | 195 |
+| `kpi` | kingpin inclination (deg) | 5.5 | 5.4 | 5.9 |
 
 **Why roll-centre movement is measured against the chassis.** The centre of
 gravity rides on the chassis. If the roll centre stays put on the chassis, the
@@ -155,14 +157,17 @@ fixed roll centre "drops" 1 mm per mm of bump, which is why the
   one possible. Different bounds or a different starting design can give a
   different answer.
 * "Iteration limit reached" just means it used its full 100-iteration budget.
-  The score had already dropped from 235 to 0.65.
+  The score had already dropped from 235 to about 10.
 * Variables that finish **at a bound** are printed with a marker. The
   optimiser wanted to go further, so think about whether that bound is real
   (packaging, chassis tubes) or can be widened.
-* It only knows about the goals you give it. In this run the ball joints moved
-  closer together (210 → 172 mm apart), which raises the loads in the arms and
-  joints, and KPI grew from 5.4° to 6.6°. Neither was a goal, so check the
-  full `suspkin sweep` output of the result before trusting it.
+* It only knows about the goals you give it, and goals pull against each
+  other. Without the `bj_spread` and `kpi` goals, the same run cut RC
+  migration to −0.006 but squeezed the ball joints from 211 to 172 mm apart
+  and raised KPI to 6.6°. With them it settles at −0.05 with the joints
+  195 mm apart. The upper ball joint is already against the rim, so the
+  lower one is the only joint that can move, and lowering it fights the RC
+  goal. The weights decide where that balance lands.
 
 ## Working on more than one PC
 
@@ -200,7 +205,7 @@ Tips:
 
 - [x] **Phase 1:** repo scaffold, baseline hardpoints, bump sweep, camber/toe and other metrics, tests
 - [x] **Phase 2:** optimisation, nudging chosen hardpoints to hit targets (camber gain, bump steer, roll centre height and migration) within 10" rim packaging limits
-- [ ] Optimiser goals for ball-joint spread, KPI and scrub, so they can't drift unnoticed
+- [ ] Optimiser goal for scrub radius and mechanical trail
 - [ ] Steering sweep and Ackermann percentage
 - [ ] Pushrod and rocker stage (motion ratio through the rocker)
 - [ ] Anti-dive / anti-squat (side-view geometry)

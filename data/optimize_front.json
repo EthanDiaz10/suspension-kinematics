@@ -16,6 +16,8 @@
     "rc_migration": {"target": 0.0, "scale": 0.05, "weight": 4.0},
     "rc_height": {"target": 30.0, "scale": 10.0, "weight": 1.0},
     "camber_gain": {"target": -0.4, "scale": 0.05, "weight": 1.0},
-    "bump_steer": {"target": 0.0, "scale": 0.05, "weight": 2.0}
+    "bump_steer": {"target": 0.0, "scale": 0.05, "weight": 2.0},
+    "bj_spread": {"target": 210.0, "scale": 10.0, "weight": 2.0},
+    "kpi": {"target": 5.5, "scale": 0.5, "weight": 1.0}
   }
 }

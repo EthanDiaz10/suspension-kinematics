@@ -83,8 +83,10 @@ def test_committed_optimised_geometry_is_better_and_fits(hp):
     cfg = OptimizeConfig.load(DATA / "optimize_front.json")
     opt = sk.load_hardpoints(DATA / "optimized_front.json")
     before, after = measure(hp), measure(opt)
-    assert abs(after["rc_migration"]) < 0.1 * abs(before["rc_migration"])
+    assert abs(after["rc_migration"]) < 0.2 * abs(before["rc_migration"])
     assert after["bump_steer"] < 0.05
+    assert after["bj_spread"] > 190  # ball joints didn't collapse together
+    assert after["kpi"] < 6.2
     assert all(c.ok for c in check_packaging(opt))
     from suspkin.optimize import score
     assert score(after, cfg.goals) < score(before, cfg.goals)
