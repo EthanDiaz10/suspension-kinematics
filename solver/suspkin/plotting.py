@@ -303,3 +303,76 @@ def plot_roll_front_view(rp, path: str | Path | None = None, title: str | None =
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(path, dpi=150, facecolor=SURFACE)
     return fig
+
+
+def plot_full_car(result, path: str | Path | None = None, title: str | None = None) -> plt.Figure:
+    """Three panels from ``fullcar.full_car``: camber vs g, roll stiffness, inside tyre loads.
+
+    ``result`` is a ``fullcar.CarResult``.
+    """
+    from .fullcar import camber_vs_g  # here, so plotting doesn't import the solver at load time
+
+    n = result.numbers
+    car = result.car
+    curves = camber_vs_g(result)
+    g = curves["lateral_g"]
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.8), facecolor=SURFACE)
+
+    # 1. Outside-tyre camber to the road as the cornering load builds up.
+    ax = axes[0]
+    for colour, axle in zip(SERIES, ("front", "rear")):
+        ax.plot(g, curves[f"{axle}_outer_camber_deg"], color=colour, linewidth=2,
+                label=f"{axle} outside tyre")
+    ax.axhline(car.target_outside_camber_deg, color=INK_MUTED, linewidth=1, linestyle="--",
+               label=f"target {car.target_outside_camber_deg:+g}°")
+    _style(ax, "Outside-tyre camber vs cornering load", "deg to the road  (− = top leans in)",
+           zero_line=False)
+    ax.axvline(car.design_lateral_g, color=INK_MUTED, linewidth=0.8, linestyle=":")
+    ax.set_xlabel(f"Lateral acceleration (g)   dotted line = design load {car.design_lateral_g:g} g",
+                  fontsize=9, color=INK_MUTED)
+    ax.legend(frameon=False, fontsize=9, labelcolor=INK_MUTED)
+
+    # 2. Roll stiffness of each axle, split into springs and anti-roll bar.
+    ax = axes[1]
+    labels = ("front", "rear")
+    springs = [n[f"{a}_roll_stiffness_springs_nm_per_deg"] for a in labels]
+    bars = [n[f"{a}_roll_stiffness_bar_nm_per_deg"] for a in labels]
+    y = np.arange(2)
+    ax.barh(y, springs, height=0.5, color=SERIES[0], edgecolor=SURFACE, linewidth=2, label="springs")
+    ax.barh(y, bars, left=springs, height=0.5, color=SERIES[1], edgecolor=SURFACE, linewidth=2,
+            label="anti-roll bar")
+    for yi, s, b in zip(y, springs, bars):
+        ax.text(s + b + 8, yi, f"{s + b:.0f} N·m/°", va="center", fontsize=9, color=INK)
+    ax.set_yticks(y, labels)
+    ax.set_ylim(2.0, -0.5)  # front on top, with room for the legend below the bars
+    ax.set_axisbelow(True)  # grid behind the bars
+    _style(ax, "Roll stiffness", "", zero_line=False)
+    ax.set_xlabel("N·m per degree of body roll", fontsize=9, color=INK_MUTED)
+    ax.set_xlim(0, max(s + b for s, b in zip(springs, bars)) * 1.3)
+    ax.grid(True, axis="x", color=GRID, linewidth=0.8)
+    ax.grid(False, axis="y")
+    ax.legend(frameon=False, fontsize=9, labelcolor=INK_MUTED, loc="lower center", ncol=2)
+
+    # 3. Inside tyre load: it falls as load moves to the outside. Zero = lift-off.
+    ax = axes[2]
+    for colour, axle in zip(SERIES, labels):
+        load = n[f"{axle}_static_wheel_load_n"] - n[f"{axle}_load_transfer_n_per_g"] * g
+        ax.plot(g, load, color=colour, linewidth=2, label=f"{axle} inside tyre")
+    ax.axhline(0, color=INK_MUTED, linewidth=0.8)
+    _style(ax, "Inside-tyre load (0 = wheel lifts)", "N", zero_line=False)
+    ax.axvline(car.design_lateral_g, color=INK_MUTED, linewidth=0.8, linestyle=":")
+    ax.set_xlabel("Lateral acceleration (g)", fontsize=9, color=INK_MUTED)
+    ax.legend(frameon=False, fontsize=9, labelcolor=INK_MUTED)
+
+    headline = (f"front share of load transfer {n['front_load_transfer_share_pct']:.1f}% "
+                f"(front weight {n['front_weight_pct']:.0f}%)   ·   "
+                f"roll {n['roll_gradient_deg_per_g']:.2f}°/g   ·   "
+                f"roll centres F {n['front_rc_height_mm']:.0f} mm / R {n['rear_rc_height_mm']:.0f} mm")
+    fig.suptitle(title or "Whole car in steady cornering", x=0.01, ha="left", fontsize=13,
+                 color=INK, fontweight="bold")
+    fig.text(0.01, 0.905, headline, fontsize=10, color=INK_MUTED)
+    fig.tight_layout(rect=(0, 0, 1, 0.92))
+    if path is not None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(path, dpi=150, facecolor=SURFACE)
+    return fig

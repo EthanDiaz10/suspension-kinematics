@@ -1,0 +1,76 @@
+{
+  "name": "Optimised FSAE-style rear corner (rear-left)",
+  "description": "Phase 7: output of `suspkin optimize data/baseline_fsae_rear.json data/optimize_rear.json` (anti-squat -0.4% -> 25%, anti-lift under braking -0.1% -> 9%, RC migration -0.38 -> -0.03, toe change over +/-50 mm 0.13 -> 0.01 deg), then hand-finished: pushrod outer end moved up to stay 14.5 mm above the raised lower arm, a 4.0 N m/deg rear anti-roll bar (same layout as the front) for ~52% front lateral load transfer, static camber -1.65 deg so the outside tyre is at about -1 deg at 1.5 g, and the upper ball joint lowered 1.5 mm to keep it inside the rim at that camber.",
+  "units": "mm",
+  "coordinate_system": "SAE/ISO vehicle axes: +X forward, +Y left, +Z up. Origin on the ground plane, on the car centerline, at the REAR axle line.",
+  "side": "rear-left",
+  "packaging": {
+    "_note": "10 inch rim envelope, checked in the wheel's own frame (see solver/suspkin/packaging.py)",
+    "rim_inner_radius_mm": 117.0,
+    "rim_half_width_mm": 89.0,
+    "radial_clearance_mm": 8.0,
+    "hub_face_axial_mm": -20.0,
+    "checked_points": ["UBJ", "LBJ", "RTO"]
+  },
+  "vehicle": {
+    "_note": "Whole-car numbers (see solver/suspkin/sideview.py). Same made-up car as the front file; this corner is on the driven rear axle with a chassis-mounted diff and outboard brakes. spring_rate_n_per_mm is one rear corner's spring (40 N/mm, about 230 lb/in). Car-level numbers (mass, weight split, design g) are read from the FRONT file by `suspkin car`.",
+    "axle": "rear",
+    "wheelbase_mm": 1550.0,
+    "cg_height_mm": 290.0,
+    "front_brake_bias": 0.65,
+    "brakes": "outboard",
+    "driven": true,
+    "spring_rate_n_per_mm": 40.0
+  },
+  "point_descriptions": {
+    "UAF": "Upper A-arm, front chassis pivot",
+    "UAA": "Upper A-arm, aft chassis pivot",
+    "LAF": "Lower A-arm, front chassis pivot",
+    "LAA": "Lower A-arm, aft chassis pivot",
+    "RTI": "Toe link inner end (fixed on the chassis)",
+    "SHC": "Damper chassis end",
+    "UBJ": "Upper ball joint",
+    "LBJ": "Lower ball joint",
+    "RTO": "Toe link outer end (on the upright, behind the axle)",
+    "WC": "Wheel center",
+    "CP": "Tire contact patch center",
+    "PRO": "Pushrod outer end (bracket on the lower A-arm)",
+    "PRI": "Pushrod inner end (on the rocker)",
+    "RKP": "Rocker pivot (on its rotation axis, on the chassis)",
+    "SHR": "Damper end on the rocker"
+  },
+  "static_camber_deg": -1.65,
+  "static_toe_deg": 0.0,
+  "chassis": {
+    "UAF": [120.0, 290.0, 289.2566],
+    "UAA": [-110.0, 290.0, 277.9229],
+    "LAF": [140.0, 195.0, 132.1711],
+    "LAA": [-120.0, 195.0, 119.8067],
+    "RTI": [-70.0, 197.1193, 129.3632],
+    "SHC": [5.0, 34.6, 474.2]
+  },
+  "upright": {
+    "UBJ": [0.0, 550.0, 334.2281],
+    "LBJ": [0.0, 570.0, 145.0],
+    "RTO": [-70.0, 565.0, 150.0],
+    "WC": [0.0, 600.0, 228.0],
+    "CP": [0.0, 600.0, 0.0]
+  },
+  "rocker": {
+    "_note": "Pushrod and rocker (bellcrank). The rocker spins about 'axis' through RKP. See solver/suspkin/rocker.py.",
+    "pushrod_mount": "lower_arm",
+    "axis": [1.0, 0.0, 0.0],
+    "PRO": [5.0, 530.0, 157.5],
+    "PRI": [5.0, 262.5, 453.0],
+    "RKP": [5.0, 225.0, 420.0],
+    "SHR": [5.0, 234.6, 474.2]
+  },
+  "arb": {
+    "_note": "Rear anti-roll bar (U-bar), same layout as the front: a drop link from ARL on the rocker to the end of the bar's arm (ARA); the arm joins the bar at ARP and the bar runs across the car (Y axis). See solver/suspkin/arb.py. Rate chosen in Phase 7 with `suspkin car` for ~52% front lateral load transfer.",
+    "link_mount": "rocker",
+    "rate_nm_per_deg": 4.0,
+    "ARL": [5.0, 200.0, 405.0],
+    "ARA": [5.0, 200.0, 330.0],
+    "ARP": [-75.0, 200.0, 330.0]
+  }
+}

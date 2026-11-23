@@ -97,6 +97,12 @@ TYRE_WIDTH_MM = 180.0           # about 7" wide
 RIM_RADIUS_MM = 127.0           # 10" rim -> 127 mm; the tyre is drawn as a ring
 TYRE_OPACITY = 0.25             # 0 = invisible, 1 = solid
 
+# Put the corner where it sits on the whole car. Each hardpoints file has its
+# origin at its own axle line; with this on, a REAR corner is moved one
+# wheelbase back (-X) so front and rear STEP files line up in one assembly
+# (origin at the front axle). A front corner doesn't move either way.
+PLACE_ON_CAR = True
+
 # Ask where to save the STEP file at the end
 EXPORT_STEP = True
 
@@ -407,6 +413,8 @@ def build(ui, json_path):
         if travel is None:
             return None
     model = geo.parse_model(raw, travel_mm=travel, source=json_path)
+    if PLACE_ON_CAR:
+        model = geo.place_on_car(model)
     points = model["points"]
 
     # A fresh design, so the script never touches whatever you had open.
@@ -428,10 +436,11 @@ def build(ui, json_path):
     # 2. One component per part: tubes + end fittings
     notes = []
     sizes_mm = {name: float(value.split()[0]) for name, value, _c in PARAMETERS}
-    segments = geo.tube_segments(points, BALL_JOINT_RADIUS_MM, ROD_END_RADIUS_MM)
+    axle = model["axle"]
+    segments = geo.tube_segments(points, BALL_JOINT_RADIUS_MM, ROD_END_RADIUS_MM, axle=axle)
     for group, (comp_name, od_param, wall_param) in PARTS.items():
-        comp = new_component(root, comp_name, notes)
-        links = [lk for lk in geo.skeleton_links(points) if lk[3] == group]
+        comp = new_component(root, geo.part_name(comp_name, axle), notes)
+        links = [lk for lk in geo.skeleton_links(points, axle) if lk[3] == group]
         for seg in segments:
             if seg["group"] == group:
                 build_tube(comp, seg, od_param, wall_param,
@@ -464,6 +473,12 @@ def summary_text(json_path, model, step_path, notes):
     ]
     if model["kind"] == "poses":
         lines.append("Wheel travel: {:+.1f} mm".format(model["travel_mm"]))
+    dx = geo.car_position_offset(model)[0]
+    if model["axle"] == "rear":
+        if PLACE_ON_CAR:
+            lines.append("Rear corner, placed on the car: moved {:+.0f} mm in X".format(dx))
+        else:
+            lines.append("Rear corner, at its own axle line (PLACE_ON_CAR is off)")
     lines += [
         "",
         "Check against suspkin output:",
@@ -471,7 +486,7 @@ def summary_text(json_path, model, step_path, notes):
         "",
         "Link lengths, centre to centre (mm):",
     ]
-    for name, length in geo.link_lengths(model["points"]).items():
+    for name, length in geo.link_lengths(model["points"], model["axle"]).items():
         lines.append("  {:<24} {:7.1f}".format(name, length))
     if model["rocker_axis"] is None:
         lines.append("  (no rocker in this file: drawn as a direct-acting damper)")

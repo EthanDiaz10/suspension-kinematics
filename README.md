@@ -10,7 +10,8 @@ Change a hardpoint in a JSON file, re-run one command, and get camber, toe,
 caster, KPI, scrub, trail, roll centre, motion ratio through a pushrod and
 rocker, and anti-dive over the full wheel travel, plus steering angles and
 Ackermann over the full rack travel, and roll camber, roll steer, the roll
-centre, roll stiffness (springs and anti-roll bar) and roll per g as the body rolls, with no manual remodelling. Or let the optimiser move the hardpoints for you,
+centre, roll stiffness (springs and anti-roll bar) and roll per g as the body rolls, for the
+front and the rear corner, and how the whole car shares its load transfer, with no manual remodelling. Or let the optimiser move the hardpoints for you,
 toward targets you set, while keeping the joints inside a 10" rim.
 
 ![Bump sweep of the baseline front corner](docs/images/bump_sweep.png)
@@ -30,6 +31,7 @@ pip install -e ".[dev]"
 suspkin sweep data/baseline_fsae_front.json   # writes CSV, JSON and plots to results/
 suspkin steer data/baseline_fsae_front.json   # steering sweep and Ackermann
 suspkin roll data/optimized_front.json        # body roll, anti-roll bar, roll per g
+suspkin car data/optimized_front.json data/optimized_rear.json   # whole car, real front + rear
 suspkin check data/baseline_fsae_front.json   # do the joints fit inside the rim?
 suspkin optimize data/baseline_fsae_front.json data/optimize_front.json   # ~2 minutes
 pytest                                         # run the tests
@@ -84,7 +86,9 @@ The solver and the CAD script only talk through JSON files (hardpoints or
 
 * **Units:** millimetres and degrees.
 * **Axes (SAE/ISO):** +X forward, +Y left, +Z up. Origin on the ground, on the
-  car centreline, at the front axle line. We model the **front-left** corner.
+  car centreline, at the front axle line. We model the **front-left** corner
+  (and the **rear-left** one, whose file has its origin at the rear axle line;
+  see Phase 7).
 * **Signs:** negative camber = top of tyre leans in; positive toe = toe-in;
   positive caster = upper ball joint behind lower; positive scrub = steering
   axis hits the ground inboard of the contact patch.
@@ -433,6 +437,93 @@ suspkin roll data/optimized_front.json --arb-rate 0     # no bar
 suspkin roll data/optimized_front.json --arb-rate 10    # stiffer bar
 ```
 
+## Rear corner and the whole car (Phase 7)
+
+![Whole car in steady cornering](docs/images/full_car.png)
+
+### The rear corner
+
+`data/baseline_fsae_rear.json` and `data/optimized_rear.json` describe the
+**rear-left** corner. It is the same double wishbone and the same solver, with
+three differences:
+
+* **A toe link instead of a tie rod.** It uses the same two points (`RTI` on
+  the chassis, `RTO` on the upright), but nothing moves `RTI`, so it just holds
+  the toe. `suspkin steer` refuses a rear file, and `suspkin sweep` reports
+  the toe change in bump. The toe link sits **behind** the axle (x = −70 mm).
+* **Its own origin.** The file's origin is on the ground at the **rear** axle
+  line (so front and rear files read the same way). The Fusion script moves it
+  one wheelbase back to its place on the car.
+* **A driven axle** (`"axle": "rear"`, `"driven": true` in its `vehicle`
+  block), with a chassis-mounted diff and outboard brakes. So the side view
+  gives **anti-squat** (from the wheel centre's path, because the drive
+  torque goes into the chassis) and **anti-lift** under braking (from the
+  contact patch, with the rear's 35% of the braking).
+
+The optimiser has a new goal, `anti_drive` (anti-squat at the rear), and on a
+rear file the `anti_dive` goal means anti-lift. Side-view goals need
+variables that tilt an arm in side view, so `data/optimize_rear.json` moves
+the **front** pivot of each arm on its own (`UAF`, `LAF`) as well as both
+pivots together. On this rear the solution has the arms almost parallel in
+side view: the wheel moves about 0.5 mm rearward for every 10 mm of bump,
+which gives both numbers below.
+
+![Rear corner before vs after optimisation](docs/images/rear_optimization_comparison.png)
+
+| Rear corner | Baseline | Optimised |
+|---|---|---|
+| Anti-squat | −0.4% | 25% |
+| Anti-lift under braking | −0.1% | 9% |
+| Toe change over ±50 mm | 0.13° | 0.01° |
+| RC migration vs chassis | −0.38 mm/mm | −0.04 mm/mm |
+| Roll centre height | 30 mm | 33 mm |
+| Camber gain | −0.36°/10 mm | −0.42°/10 mm |
+| Ball joint spread | 206 mm | 190 mm |
+
+After the optimiser, by hand: the pushrod bracket moved up with the raised
+lower arm, a 4.0 N·m/° rear bar (same layout as the front) was added, static
+camber went to −1.65°, and `UBJ` came down 1.5 mm to stay inside the rim at
+that camber. Rear springs are 40 N/mm (about 230 lb/in).
+
+### The whole car: `suspkin car`
+
+```bash
+suspkin car data/optimized_front.json data/optimized_rear.json
+```
+
+runs a roll sweep on each axle and combines the **real** numbers for both
+(`solver/suspkin/fullcar.py`): each axle's roll stiffness (springs and bar),
+roll centre and track, then the roll axis, roll per g, and how the lateral
+load transfer splits front/rear. Car-level numbers (mass, weight split, CG
+height, design g) are read from the front file. It also reports, for each
+axle, the outside tyre's camber at the design load, the static camber that
+would hit the target, the inside and outside tyre loads (does the inside
+wheel lift?), and each axle's ride frequency. Before Phase 7 the rear numbers
+were placeholders in the front file's `vehicle` block; they're now copied
+from the real rear so `suspkin roll` on the front file alone agrees, and
+`suspkin car` warns if they drift apart.
+
+| Whole car at 1.5 g | Phase 6 (placeholder rear) | Phase 7 (real rear) |
+|---|---|---|
+| Rear roll stiffness | 400 N·m/° (guess) | 293 springs + 112 bar = 404 N·m/° |
+| Roll centres, front / rear | 25 / 45 mm (guess) | 25 / 33 mm |
+| Roll per g | 0.81°/g | 0.82°/g |
+| Front share of load transfer (front weight 47%) | 51% | 51.8% |
+| Outside-tyre camber, front / rear | −1.0° / – | −0.95° / −0.98° |
+| Inside-tyre load, front / rear | – | 134 / 252 N (static 645 / 728 N) |
+| Ride frequency, front / rear | – | 2.85 / 2.82 Hz |
+
+What it means: the car leans slightly toward understeer (about 5 points more
+load transfer at the front than its weight share), it rolls about 1.2° at
+1.5 g, and both outside tyres sit close to the −1° camber target. The roll
+axis rises toward the rear, which is the usual layout. The front inside tyre
+is the one to watch: it's down to about a fifth of its static load at 1.5 g
+and would lift at about 1.9 g.
+
+Try other rear bar rates by editing `"rate_nm_per_deg"` in the rear file's
+`arb` block and re-running `suspkin car`: a stiffer rear bar moves load
+transfer to the rear (less understeer) and reduces roll.
+
 ## Working on more than one PC
 
 Git keeps every PC in sync through GitHub. Set up each PC once:
@@ -476,7 +567,9 @@ Tips:
 - [x] **Phase 5:** roll sweep: both corners at once, roll camber and steer, roll centre under roll, roll stiffness from the springs
 - [x] **Phase 6:** front anti-roll bar, roll per g, front/rear load transfer split, static camber chosen for the design cornering load
 - [ ] Draw the anti-roll bar in the Fusion script
-- [ ] Rear corner hardpoints (anti-squat, driven axle)
+- [x] **Phase 7:** rear corner (toe link, anti-squat and anti-lift, rear anti-roll bar), `suspkin car` for the whole-car roll stiffness split, load transfer, roll per g and tyre loads, rear corner in the Fusion script
+- [ ] **Phase 8:** load cases, link forces, tube sizing (and an upright stress check)
+- [ ] **Phase 9:** full-car Fusion assembly, renders and a design report
 
 ## License
 

@@ -3,6 +3,7 @@
     suspkin sweep data/baseline_fsae_front.json
     suspkin steer data/baseline_fsae_front.json --rack 25
     suspkin roll data/optimized_front.json --roll 3
+    suspkin car data/optimized_front.json data/optimized_rear.json
     suspkin check data/baseline_fsae_front.json
     suspkin optimize data/baseline_fsae_front.json data/optimize_front.json
 """
@@ -18,12 +19,22 @@ from .kinematics import DoubleWishbone, bump_sweep, steer_sweep
 from .metrics import compute_metrics, summary
 from .optimize import OptimizeConfig, optimize
 from .packaging import check_packaging
-from .plotting import (plot_comparison, plot_front_view, plot_roll, plot_roll_front_view,
-                       plot_steering, plot_sweep)
+from .fullcar import full_car, placeholder_check
+from .plotting import (plot_comparison, plot_front_view, plot_full_car, plot_roll,
+                       plot_roll_front_view, plot_steering, plot_sweep)
 from .roll import ROLL_COLUMNS, roll_metrics, roll_summary, roll_sweep
 from .rocker import rocker_checks
 from .sideview import VehicleParams
 from .steering import STEER_COLUMNS, steering_metrics, steering_summary
+
+
+# Whole-car keys in roll_summary, printed as their own group.
+CAR_KEYS = ("roll_axis_height_at_cg_mm", "roll_moment_arm_mm", "roll_gradient_deg_per_g",
+            "roll_at_design_g_deg", "front_roll_stiffness_share_pct",
+            "front_load_transfer_share_pct", "front_weight_pct",
+            "front_load_transfer_n_per_g", "rear_load_transfer_n_per_g",
+            "front_geometric_share_pct", "rear_geometric_share_pct",
+            "outer_camber_at_design_g_deg", "static_camber_for_target_deg")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -57,6 +68,13 @@ def main(argv: list[str] | None = None) -> None:
                          "0 to try it without the bar)")
     ro.add_argument("--out", default="results", help="output folder (default results/)")
 
+    ca = sub.add_parser("car", help="whole car: front + rear roll stiffness, load transfer, roll per g")
+    ca.add_argument("front", help="front hardpoints JSON file (car-level numbers are read from it)")
+    ca.add_argument("rear", help="rear hardpoints JSON file")
+    ca.add_argument("--roll", type=float, default=3.0, help="± body roll to sweep each axle (default 3)")
+    ca.add_argument("--step", type=float, default=0.25, help="step in degrees (default 0.25)")
+    ca.add_argument("--out", default="results", help="output folder (default results/)")
+
     o = sub.add_parser("optimize", help="nudge hardpoints toward the targets in a config file")
     o.add_argument("hardpoints", help="starting hardpoints JSON file")
     o.add_argument("config", help="optimiser config JSON (variables, goals)")
@@ -67,7 +85,7 @@ def main(argv: list[str] | None = None) -> None:
     c.add_argument("hardpoints", help="hardpoints JSON file")
 
     args = parser.parse_args(argv)
-    {"sweep": run_sweep, "steer": run_steer, "roll": run_roll, "optimize": run_optimize,
+    {"sweep": run_sweep, "steer": run_steer, "roll": run_roll, "car": run_car, "optimize": run_optimize,
      "check": run_check}[args.command](args)
 
 
@@ -117,7 +135,8 @@ def run_sweep(args) -> None:
     out = Path(args.out)
     stem = Path(args.hardpoints).stem
     write_metrics_csv(metrics, out / f"{stem}_sweep.csv")
-    write_poses_json(poses, out / f"{stem}_poses.json", name=hp.name, rocker=hp.rocker)
+    write_poses_json(poses, out / f"{stem}_poses.json", name=hp.name, rocker=hp.rocker,
+                     vehicle=vehicle)
     plot_sweep(metrics, out / f"{stem}_sweep.png", title=hp.name)
     plot_front_view(poses, out / f"{stem}_front_view.png")
 
@@ -136,6 +155,9 @@ def run_sweep(args) -> None:
 def run_steer(args) -> None:
     hp = load_hardpoints(args.hardpoints)
     vehicle = VehicleParams.from_hardpoints(hp)
+    if vehicle.axle == "rear":
+        raise SystemExit("This is a rear corner: its toe link is fixed, so there is no steering "
+                         "to sweep. Use `suspkin sweep` for its toe change in bump.")
     poses = steer_sweep(hp, args.rack, args.step, args.travel)
     steer = steering_metrics(poses, vehicle)
 
@@ -173,21 +195,87 @@ def run_roll(args) -> None:
     print(f"{hp.name}: body roll ±{args.roll:g} deg "
           "(+ = leans right, as in a left turn; the right wheel is then the outside one)")
     summ = roll_summary(roll, vehicle)
-    # Print in three groups, so the whole-car numbers stand out.
-    car_keys = ("roll_moment_arm_mm", "roll_gradient_deg_per_g", "roll_at_design_g_deg",
-                "front_roll_stiffness_share_pct", "front_load_transfer_share_pct",
-                "front_weight_pct", "outer_camber_at_design_g_deg", "static_camber_for_target_deg")
+    # Print in two groups, so the whole-car numbers stand out.
     for k, v in summ.items():
-        if k not in car_keys:
+        if k not in CAR_KEYS:
             print(f"  {k:36s} {v:+9.3f}")
     print("  (camber compensation: 0% = wheel leans with the body, 100% = stays upright to the road)")
-    print("  (roll steer: below 0 = front wheels steer out of the turn = roll understeer)")
-    print(f"Whole car at {vehicle.design_lateral_g:g} g (rear numbers are placeholders, rigid tyres):")
-    for k in car_keys:
-        print(f"  {k:36s} {summ[k]:+9.3f}")
-    print(f"  (static_camber_for_target: the static camber that puts the outside tyre at "
-          f"{vehicle.target_outside_camber_deg:+g} deg at {vehicle.design_lateral_g:g} g)")
+    if vehicle.axle == "front":
+        print("  (roll steer: below 0 = front wheels steer out of the turn = roll understeer)")
+        print(f"Whole car at {vehicle.design_lateral_g:g} g, using the rear_* numbers in this file's "
+              "vehicle block (rigid tyres). For a real rear corner use `suspkin car`:")
+        for k in CAR_KEYS:
+            print(f"  {k:36s} {summ[k]:+9.3f}")
+        print(f"  (static_camber_for_target: the static camber that puts the outside tyre at "
+              f"{vehicle.target_outside_camber_deg:+g} deg at {vehicle.design_lateral_g:g} g)")
+    else:
+        print("  (roll steer: above 0 = rear wheels steer into the turn = roll oversteer)")
+        print("Whole-car numbers (roll per g, load transfer split) need both axles: "
+              "suspkin car <front.json> <rear.json>")
     print(f"Wrote results to {out.resolve()}")
+
+
+
+# Groups of whole-car numbers, printed in this order with a heading each.
+CAR_GROUPS = (
+    ("Each axle", ("front_roll_stiffness_springs_nm_per_deg", "front_roll_stiffness_bar_nm_per_deg",
+                   "front_roll_stiffness_nm_per_deg", "rear_roll_stiffness_springs_nm_per_deg",
+                   "rear_roll_stiffness_bar_nm_per_deg", "rear_roll_stiffness_nm_per_deg",
+                   "front_rc_height_mm", "rear_rc_height_mm", "front_track_mm", "rear_track_mm",
+                   "front_wheel_rate_n_per_mm", "rear_wheel_rate_n_per_mm",
+                   "front_ride_frequency_hz", "rear_ride_frequency_hz")),
+    ("Body roll", ("roll_axis_height_at_cg_mm", "roll_moment_arm_mm", "roll_gradient_deg_per_g",
+                   "roll_at_design_g_deg")),
+    ("Balance", ("front_weight_pct", "front_roll_stiffness_share_pct",
+                 "front_load_transfer_share_pct", "front_geometric_share_pct",
+                 "rear_geometric_share_pct")),
+    ("Tyres at the design load", ("front_outer_camber_at_design_g_deg",
+                                  "front_static_camber_for_target_deg",
+                                  "rear_outer_camber_at_design_g_deg",
+                                  "rear_static_camber_for_target_deg",
+                                  "front_inside_wheel_load_n", "front_outside_wheel_load_n",
+                                  "rear_inside_wheel_load_n", "rear_outside_wheel_load_n")),
+)
+
+
+def run_car(args) -> None:
+    front = load_hardpoints(args.front)
+    rear = load_hardpoints(args.rear)
+    try:
+        result = full_car(front, rear, args.roll, args.step)
+    except ValueError as e:
+        raise SystemExit(str(e))
+    n = result.numbers
+    car = result.car
+
+    out = Path(args.out)
+    stem = f"{Path(args.front).stem}+{Path(args.rear).stem}"
+    plot_full_car(result, out / f"{stem}_car.png")
+
+    print(f"Whole car: {front.name} + {rear.name}")
+    print(f"  {car.mass_kg:g} kg, {100 * car.front_weight_fraction:g}% on the front, CG "
+          f"{car.cg_height_mm:g} mm high, design load {car.design_lateral_g:g} g (rigid tyres)")
+    for heading, keys in CAR_GROUPS:
+        print(heading + ":")
+        for k in keys:
+            print(f"  {k:40s} {n[k]:+9.3f}")
+    print("Reading it:")
+    print("  front_load_transfer_share above front_weight = the car leans toward understeer "
+          "(a few % above is a common start)")
+    print("  geometric share = load transfer that goes through the links at the roll centre, "
+          "not the springs (it acts instantly)")
+    print(f"  static_camber_for_target = static camber that puts that outside tyre at "
+          f"{car.target_outside_camber_deg:+g} deg at {car.design_lateral_g:g} g")
+    for axle in ("front", "rear"):
+        if n[f"{axle}_inside_wheel_load_n"] < 0:
+            print(f"  WARNING: the {axle} inside wheel lifts before {car.design_lateral_g:g} g")
+    stale = {k: v for k, v in placeholder_check(result).items() if abs(v[0] - v[1]) > 0.5}
+    if stale:
+        print(f"Note: {args.front} still has rear placeholders that differ from the real rear "
+              "(only `suspkin roll` on the front file uses them):")
+        for k, (old, new) in stale.items():
+            print(f"  vehicle.{k}: {old:g} -> {new:.1f}")
+    print(f"Wrote {(out / (stem + '_car.png')).resolve()}")
 
 
 if __name__ == "__main__":

@@ -345,8 +345,12 @@ def _camber_from_axis(axis: np.ndarray) -> float:
     return float(-np.degrees(np.arcsin(axis[2])))
 
 
-def roll_summary(roll: dict[str, np.ndarray], vehicle: VehicleParams | None = None) -> dict[str, float]:
+def roll_summary(roll: dict[str, np.ndarray], vehicle: VehicleParams | None = None,
+                 whole_car: bool | None = None) -> dict[str, float]:
     """Headline roll numbers, mostly slopes at zero roll (per degree of roll).
+
+    ``whole_car``: also add roll per g and the load transfer split, using the
+    rear_* placeholders in the vehicle block. Default: only for a front file.
 
     At positive roll (a left turn) the right wheel is the outside one.
     """
@@ -392,22 +396,42 @@ def roll_summary(roll: dict[str, np.ndarray], vehicle: VehicleParams | None = No
         "roll_stiffness_bar_nm_per_deg": k_bar,
         "roll_stiffness_nm_per_deg": k_springs + k_bar,
     }
+    if whole_car is None:
+        whole_car = vehicle.axle == "front"
+    if not whole_car:
+        # The whole-car numbers below use the rear_* placeholders of a FRONT
+        # file. For a rear corner, use fullcar.py (``suspkin car``) instead,
+        # which combines a real front and a real rear file.
+        return out
     # Whole car: how far it actually rolls, and what the outside tyre's camber
     # is at the design cornering load.
     car = whole_car_roll(out["roll_stiffness_nm_per_deg"], out["rc_height_mm"],
                          float(roll["track_mm"][i0]), vehicle)
     out.update(car)
-    phi = car["roll_at_design_g_deg"]
-    if r.min() <= phi <= r.max():
-        camber_now = float(np.interp(phi, r, roll["camber_right_deg"]))
+    out.update(camber_at_roll(roll, car["roll_at_design_g_deg"], vehicle.target_outside_camber_deg))
+    return out
+
+
+def camber_at_roll(roll: dict[str, np.ndarray], roll_deg: float,
+                   target_deg: float) -> dict[str, float]:
+    """Outside-tyre camber at a given body roll, and the static camber for a target.
+
+    Static camber just rotates the wheel on the upright, so it shifts the
+    whole camber curve up or down by the same amount (a test checks this).
+    So the static camber that puts the outside tyre at ``target_deg`` is the
+    current static camber plus the error.
+    """
+    r = roll["roll_deg"]
+    i0 = int(np.argmin(np.abs(r)))
+    if r.min() <= roll_deg <= r.max():
+        camber_now = float(np.interp(roll_deg, r, roll["camber_right_deg"]))
     else:
         camber_now = float("nan")  # the sweep doesn't reach that far: use a bigger --roll
     static_now = float(roll["camber_right_deg"][i0])
-    out["outer_camber_at_design_g_deg"] = camber_now
-    # Static camber just rotates the wheel on the upright, so it shifts the
-    # whole camber curve up or down by the same amount (a test checks this).
-    out["static_camber_for_target_deg"] = static_now + vehicle.target_outside_camber_deg - camber_now
-    return out
+    return {
+        "outer_camber_at_design_g_deg": camber_now,
+        "static_camber_for_target_deg": static_now + target_deg - camber_now,
+    }
 
 
 G = 9.81  # m/s^2
@@ -415,6 +439,25 @@ G = 9.81  # m/s^2
 
 def whole_car_roll(front_k_nm_per_deg: float, front_rc_mm: float, front_track_mm: float,
                    vehicle: VehicleParams) -> dict[str, float]:
+    """Roll per g and the front/rear load transfer split, from ONE front file.
+
+    The rear axle's roll stiffness, roll centre and track come from the
+    ``rear_*`` numbers in the front file's ``vehicle`` block. To use a real
+    rear corner instead, see ``fullcar.py`` (``suspkin car``), which calls
+    :func:`load_transfer` with both axles' solved numbers.
+    """
+    v = vehicle
+    return load_transfer(
+        front_k_nm_per_deg, v.rear_roll_stiffness_nm_per_deg,
+        front_rc_mm, v.rear_rc_height_mm,
+        front_track_mm, v.rear_track_mm, v,
+    )
+
+
+def load_transfer(k_front_nm_per_deg: float, k_rear_nm_per_deg: float,
+                  rc_front_mm: float, rc_rear_mm: float,
+                  track_front_mm: float, track_rear_mm: float,
+                  vehicle: VehicleParams) -> dict[str, float]:
     """Roll per g and the front/rear split of lateral load transfer.
 
     Steady cornering at lateral acceleration ``A`` (in g). Following Milliken
@@ -440,27 +483,37 @@ def whole_car_roll(front_k_nm_per_deg: float, front_rc_mm: float, front_track_mm
     starting point is a few percent above the front weight share.
 
     Simplifications: everything is treated as sprung mass and the tyres are
-    rigid. The rear numbers are placeholders until the rear corner exists.
+    rigid. The load transfer numbers returned are per g (multiply by ``A``).
     """
     v = vehicle
     per_rad = 180.0 / np.pi
-    k_f = front_k_nm_per_deg * per_rad                       # N m / rad
-    k_r = v.rear_roll_stiffness_nm_per_deg * per_rad
+    k_f = k_front_nm_per_deg * per_rad                       # N m / rad
+    k_r = k_rear_nm_per_deg * per_rad
     L, h = v.wheelbase_mm / 1000.0, v.cg_height_mm / 1000.0  # m
     a = (1.0 - v.front_weight_fraction) * L                  # front axle to CG
-    rc_f, rc_r = front_rc_mm / 1000.0, v.rear_rc_height_mm / 1000.0
+    rc_f, rc_r = rc_front_mm / 1000.0, rc_rear_mm / 1000.0
     h_ra = rc_f + (rc_r - rc_f) * a / L
     arm = h - h_ra                                           # roll moment arm, m
     W = v.mass_kg * G
     gradient_deg = W * arm / (k_f + k_r) * per_rad           # deg per g
-    dw_f = W / (front_track_mm / 1000.0) * (arm * k_f / (k_f + k_r) + v.front_weight_fraction * rc_f)
-    dw_r = W / (v.rear_track_mm / 1000.0) * (arm * k_r / (k_f + k_r)
-                                              + (1.0 - v.front_weight_fraction) * rc_r)
+    wf = v.front_weight_fraction
+    # Split each axle's load transfer into its two parts (N per g).
+    dw_f_elastic = W / (track_front_mm / 1000.0) * arm * k_f / (k_f + k_r)
+    dw_f_geometric = W / (track_front_mm / 1000.0) * wf * rc_f
+    dw_r_elastic = W / (track_rear_mm / 1000.0) * arm * k_r / (k_f + k_r)
+    dw_r_geometric = W / (track_rear_mm / 1000.0) * (1.0 - wf) * rc_r
+    dw_f = dw_f_elastic + dw_f_geometric
+    dw_r = dw_r_elastic + dw_r_geometric
     return {
+        "roll_axis_height_at_cg_mm": h_ra * 1000.0,
         "roll_moment_arm_mm": arm * 1000.0,
         "roll_gradient_deg_per_g": gradient_deg,
         "roll_at_design_g_deg": gradient_deg * v.design_lateral_g,
         "front_roll_stiffness_share_pct": 100.0 * k_f / (k_f + k_r),
         "front_load_transfer_share_pct": 100.0 * dw_f / (dw_f + dw_r),
-        "front_weight_pct": 100.0 * v.front_weight_fraction,
+        "front_weight_pct": 100.0 * wf,
+        "front_load_transfer_n_per_g": dw_f,
+        "rear_load_transfer_n_per_g": dw_r,
+        "front_geometric_share_pct": 100.0 * dw_f_geometric / dw_f,
+        "rear_geometric_share_pct": 100.0 * dw_r_geometric / dw_r,
     }

@@ -93,6 +93,15 @@ Things to know:
   without a rocker still work: the pushrod is then drawn as the direct-acting
   SHC to SHU line, as in Phase 3. Rocker and damper sizes are in the
   *Settings* block (`ROCKER_BAR_RADIUS_MM`, `DAMPER_BODY_RADIUS_MM`, ...).
+* **Rear corner (Phase 7):** pick `data/optimized_rear.json` (or a rear
+  `*_poses.json`). The script reads `"axle": "rear"` from the file, names the
+  tie-rod part **Toe link**, and, with `PLACE_ON_CAR = True` in the
+  *Settings* block (the default), moves the whole corner one wheelbase back
+  (−1550 mm in X). Each hardpoints file has its origin at its own axle line;
+  this puts the rear where it sits on the car, so a front and a rear STEP
+  line up when you insert both into one assembly (origin at the front axle).
+  The finish message says how far it moved. Set it to `False` to keep the
+  rear corner at its own origin.
 * **Fusion caches Python modules.** The script reloads its helper each run,
   so edits take effect. If something still seems stale, restart Fusion.
 * **Script not showing up?** Some older Fusion versions want
