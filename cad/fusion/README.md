@@ -106,3 +106,25 @@ Things to know:
   so edits take effect. If something still seems stale, restart Fusion.
 * **Script not showing up?** Some older Fusion versions want
   `"autodeskProduct": "Fusion360"` in the `.manifest` file instead of `"Fusion"`.
+
+## Phase 9: the upright, rocker and pushrod bracket (`SuspensionParts/`)
+
+A second script, `SuspensionParts/`, builds the **real parts** (not just the
+skeleton) from the parts file that `suspkin parts` writes:
+
+```powershell
+suspkin parts data\optimized_front.json data\optimized_rear.json
+```
+
+That writes `results\optimized_front_parts.json` and
+`results\optimized_rear_parts.json`. Install the script the same way as
+above (green **+**, choose the `cad/fusion/SuspensionParts` folder), run it
+and pick one of those files. You get one component per part (upright,
+rocker, pushrod bracket), each one solid body placed where it sits on the
+car, with its material set when Fusion's library has a match, plus a STEP
+file next to the parts file.
+
+The parts are built from simple blocks and cylinders, so every inside corner
+is sharp: **add 3 to 4 mm fillets** where the arms meet the housing and the
+bosses before any stress study. The full workflow, including the Ansys
+Student study, is in [`docs/phase9-fea-guide.md`](../../docs/phase9-fea-guide.md).

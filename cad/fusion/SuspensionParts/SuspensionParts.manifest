@@ -1,0 +1,10 @@
+{
+	"autodeskProduct": "Fusion",
+	"type": "script",
+	"author": "EthanDiaz10",
+	"description": {
+		"": "Builds the upright, rocker and pushrod bracket from a suspkin *_parts.json file (Phase 9) and exports STEP."
+	},
+	"supportedOS": "windows|mac",
+	"editEnabled": true
+}

@@ -5,6 +5,7 @@
     suspkin roll data/optimized_front.json --roll 3
     suspkin car data/optimized_front.json data/optimized_rear.json
     suspkin loads data/optimized_front.json data/optimized_rear.json
+    suspkin parts data/optimized_front.json data/optimized_rear.json --step --fea
     suspkin check data/baseline_fsae_front.json
     suspkin optimize data/baseline_fsae_front.json data/optimize_front.json
 """
@@ -15,6 +16,8 @@ import argparse
 import csv
 import json
 from pathlib import Path
+
+import numpy as np
 
 from .export import write_metrics_csv, write_metrics_table, write_poses_json
 from .hardpoints import load_hardpoints, save_hardpoints
@@ -86,6 +89,20 @@ def main(argv: list[str] | None = None) -> None:
                     help="load cases, tube sizes and ratings (default data/load_cases.json)")
     lo.add_argument("--out", default="results", help="output folder (default results/)")
 
+    pa = sub.add_parser("parts", help="upright / rocker / bracket: geometry, hand calcs, STEP, quick FEA")
+    pa.add_argument("front", help="front hardpoints JSON file")
+    pa.add_argument("rear", help="rear hardpoints JSON file")
+    pa.add_argument("--cases", default="data/load_cases.json", help="load cases (default data/load_cases.json)")
+    pa.add_argument("--parts", default="data/parts.json", help="part sizes (default data/parts.json)")
+    pa.add_argument("--out", default="results", help="output folder (default results/)")
+    pa.add_argument("--step", action="store_true", help="also write a STEP file per part (needs the [fea] extras)")
+    pa.add_argument("--fea", action="store_true", help="also run the quick FEA check (needs the [fea] extras)")
+    pa.add_argument("--mesh", type=float, default=3.0, help="FEA element size in mm (default 3)")
+    pa.add_argument("--converge", action="store_true",
+                    help="with --fea: re-solve each part's worst case on 3 meshes (mesh x 1.5, x 1, x 0.7)")
+    pa.add_argument("--only", nargs="*", default=None,
+                    help="limit to some parts, e.g. --only front_upright rear_rocker")
+
     o = sub.add_parser("optimize", help="nudge hardpoints toward the targets in a config file")
     o.add_argument("hardpoints", help="starting hardpoints JSON file")
     o.add_argument("config", help="optimiser config JSON (variables, goals)")
@@ -96,7 +113,8 @@ def main(argv: list[str] | None = None) -> None:
     c.add_argument("hardpoints", help="hardpoints JSON file")
 
     args = parser.parse_args(argv)
-    {"sweep": run_sweep, "steer": run_steer, "roll": run_roll, "car": run_car, "loads": run_loads, "optimize": run_optimize,
+    {"sweep": run_sweep, "steer": run_steer, "roll": run_roll, "car": run_car, "loads": run_loads, "parts": run_parts,
+     "optimize": run_optimize,
      "check": run_check}[args.command](args)
 
 
@@ -407,6 +425,120 @@ def run_loads(args) -> None:
           f"to {out.resolve()}")
     if any(m.sf < cfg.required_sf for m in result.checks):
         print("WARNING: at least one member is below the required safety factor (see FAIL above)")
+
+
+def run_parts(args) -> None:
+    from .parts import (PartsConfig, build_parts, hand_checks, part_load_cases, parts_dict,
+                        rim_clearance)
+    front = load_hardpoints(args.front)
+    rear = load_hardpoints(args.rear)
+    try:
+        cfg = PartsConfig.load(args.parts)
+        lcfg = LoadsConfig.load(args.cases)
+        car = full_car(front, rear)
+    except (OSError, ValueError, KeyError) as e:
+        raise SystemExit(f"{type(e).__name__}: {e}")
+    result = analyse_loads(car, lcfg)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    stems = {"front": Path(args.front).stem, "rear": Path(args.rear).stem}
+    all_checks, built = [], {}
+    for axle in ("front", "rear"):
+        hp = result.corners[axle].hp
+        parts = build_parts(hp, cfg, axle)
+        loads = part_load_cases(result, axle, parts, cfg)
+        built[axle] = (parts, loads)
+        path = out / f"{stems[axle]}_parts.json"
+        path.write_text(json.dumps(parts_dict(hp, parts, loads, cfg), indent=1))
+        rc = rim_clearance(hp, parts["upright"])
+        print(f"{axle.capitalize()}: {', '.join(p.name for p in parts.values())} -> {path}")
+        flag = "ok" if rc["min_gap_mm"] >= 1.0 else "CLASH" if rc["min_gap_mm"] < 0 else "TIGHT"
+        print(f"  closest to the rim: {rc['closest']}, {rc['min_gap_mm']:.1f} mm  {flag}")
+        all_checks += hand_checks(hp, parts, loads, result, cfg)
+
+    print(f"\nHand calculations (worst load case; required safety factor {cfg.required_sf:g} on yield):")
+    print(f"  {'part':22s} {'check':50s} {'stress':>8s} {'SF':>6s}  case")
+    for c in all_checks:
+        unit = "N" if "bearing (radial" in c.item else "MPa"
+        ok = "ok" if c.sf >= cfg.required_sf else "LOW"
+        print(f"  {c.part:22s} {c.item:50s} {c.stress_mpa:5.0f} {unit:3s}{c.sf:6.1f}  {c.case} {ok}")
+        print(f"  {'':22s}   {c.how}")
+    with open(out / "parts_hand_calcs.csv", "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["part", "check", "stress_mpa_or_load_n", "case", "safety_factor", "how"])
+        for c in all_checks:
+            w.writerow([c.part, c.item, f"{c.stress_mpa:.1f}", c.case, f"{c.sf:.2f}", c.how])
+
+    # The numbers to type into Ansys / Fusion: one row per hole per case.
+    with open(out / "parts_fea_loads.csv", "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["part", "case", "hole", "what", "x_mm", "y_mm", "z_mm", "fx_n", "fy_n", "fz_n",
+                    "held_fixed_at"])
+        for axle, (parts, loads) in built.items():
+            for key, part in parts.items():
+                for lc in loads[key]:
+                    for hole, f in lc.forces.items():
+                        if np.linalg.norm(f) < 0.05:
+                            continue
+                        c = part.holes[hole].center
+                        w.writerow([part.name, lc.label, hole, part.holes[hole].description,
+                                    *[f"{v:.2f}" for v in c], *[f"{v:.1f}" for v in f], part.support])
+
+    if not (args.step or args.fea):
+        print(f"\nWrote the parts files (for the Fusion script), parts_hand_calcs.csv and "
+              f"parts_fea_loads.csv (forces to type into Ansys) to {out.resolve()}")
+        print("Add --step for STEP files and --fea for the quick finite element check.")
+        return
+    from . import fea
+    rows = []
+    for axle, (parts, loads) in built.items():
+        for key, part in parts.items():
+            tag = f"{axle}_{key}"
+            if args.only and tag not in args.only:
+                continue
+            mat = cfg.material(part.material)
+            if args.step:
+                step = out / f"{stems[axle]}_{key}.step"
+                vol = fea.write_step(part, step)
+                print(f"\n{part.name}: {vol / 1000:.1f} cm^3, {vol * mat['density_kg_m3'] * 1e-6:.0f} g "
+                      f"({part.material}) -> {step.name}")
+            if not args.fea:
+                continue
+            cases = {lc.label: lc.forces for lc in loads[key]}
+            print(f"\n{part.name}: FEA, {args.mesh:g} mm elements, fixed at '{part.support}'")
+            res = fea.solve_part(part, cases, mat, args.mesh)
+            for r in res:
+                sf = mat["yield_mpa"] / r.max_vm_away_mpa if r.max_vm_away_mpa > 0 else float("inf")
+                print(f"  {r.case:30s} peak {r.max_vm_away_mpa:6.0f} MPa (SF {sf:4.1f}) "
+                      f"incl. support edge {r.max_vm_mpa:6.0f}, max movement {r.max_disp_mm:.3f} mm")
+                rows.append([tag, r.case, args.mesh, r.n_elements, f"{r.max_vm_away_mpa:.1f}",
+                             f"{r.max_vm_mpa:.1f}", f"{sf:.2f}", f"{r.max_disp_mm:.4f}",
+                             *[f"{x:.1f}" for x in r.where_away]])
+            worst = max(res, key=lambda r: r.max_vm_away_mpa)
+            print(f"  worst: {worst.case}, {worst.n_elements} elements; peak at "
+                  f"({', '.join(f'{x:.0f}' for x in worst.where_away)}) mm")
+            if args.converge:
+                sizes = (args.mesh * 1.5, args.mesh, args.mesh * 0.7)
+                conv = fea.convergence(part, worst.case, cases[worst.case], mat, sizes)
+                print("  mesh convergence (same case, finer and finer):")
+                for r in conv:
+                    print(f"    {r.mesh_size:4.1f} mm  {r.n_elements:7d} elements  peak {r.max_vm_away_mpa:6.0f} MPa  "
+                          f"movement {r.max_disp_mm:.4f} mm")
+                    rows.append([tag, worst.case + " (convergence)", r.mesh_size, r.n_elements,
+                                 f"{r.max_vm_away_mpa:.1f}", f"{r.max_vm_mpa:.1f}",
+                                 f"{mat['yield_mpa'] / r.max_vm_away_mpa:.2f}", f"{r.max_disp_mm:.4f}",
+                                 *[f"{x:.1f}" for x in r.where_away]])
+                change = 100 * abs(conv[-1].max_vm_away_mpa - conv[-2].max_vm_away_mpa) / conv[-1].max_vm_away_mpa
+                print(f"    last refinement changed the peak by {change:.1f}% "
+                      f"({'converged' if change < 5 else 'refine further'})")
+    if rows:
+        with open(out / "parts_fea.csv", "w", newline="") as fh:
+            w = csv.writer(fh)
+            w.writerow(["part", "case", "mesh_mm", "elements", "peak_vm_away_from_support_mpa",
+                        "peak_vm_anywhere_mpa", "sf_on_yield", "max_disp_mm", "x", "y", "z"])
+            w.writerows(rows)
+    print(f"\nWrote parts files, hand calcs{', STEP files' if args.step else ''}"
+          f"{', FEA results (parts_fea.csv)' if args.fea else ''} to {out.resolve()}")
 
 
 if __name__ == "__main__":
