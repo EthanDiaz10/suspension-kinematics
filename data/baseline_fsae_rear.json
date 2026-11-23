@@ -1,0 +1,68 @@
+{
+  "name": "Baseline FSAE-style rear corner (rear-left)",
+  "description": "Starter rear double-wishbone geometry with plausible FSAE dimensions: a fixed toe link behind the axle instead of a steering tie rod, pushrod and rocker, driven axle. A starting point for the Phase 7 optimiser, not a validated design.",
+  "units": "mm",
+  "coordinate_system": "SAE/ISO vehicle axes: +X forward, +Y left, +Z up. Origin on the ground plane, on the car centerline, at the REAR axle line.",
+  "side": "rear-left",
+  "static_camber_deg": -1.5,
+  "static_toe_deg": 0.0,
+  "packaging": {
+    "_note": "10 inch rim envelope, checked in the wheel's own frame (see solver/suspkin/packaging.py)",
+    "rim_inner_radius_mm": 117.0,
+    "rim_half_width_mm": 89.0,
+    "radial_clearance_mm": 8.0,
+    "hub_face_axial_mm": -20.0,
+    "checked_points": ["UBJ", "LBJ", "RTO"]
+  },
+  "vehicle": {
+    "_note": "Whole-car numbers (see solver/suspkin/sideview.py). Same made-up car as the front file; this corner is on the driven rear axle. spring_rate_n_per_mm is one rear corner's spring.",
+    "axle": "rear",
+    "wheelbase_mm": 1550.0,
+    "cg_height_mm": 290.0,
+    "front_brake_bias": 0.65,
+    "brakes": "outboard",
+    "driven": true,
+    "spring_rate_n_per_mm": 40.0
+  },
+  "chassis": {
+    "UAF": [120.0, 270.0, 285.0],
+    "UAA": [-110.0, 270.0, 285.0],
+    "LAF": [140.0, 215.0, 115.0],
+    "LAA": [-120.0, 215.0, 115.0],
+    "RTI": [-70.0, 215.0, 135.0],
+    "SHC": [5.0, 34.6, 474.2]
+  },
+  "upright": {
+    "UBJ": [0.0, 550.0, 330.0],
+    "LBJ": [0.0, 570.0, 125.0],
+    "RTO": [-70.0, 565.0, 150.0],
+    "WC": [0.0, 600.0, 228.0],
+    "CP": [0.0, 600.0, 0.0]
+  },
+  "rocker": {
+    "_note": "Pushrod and rocker (bellcrank). The rocker spins about 'axis' through RKP. See solver/suspkin/rocker.py.",
+    "pushrod_mount": "lower_arm",
+    "axis": [1.0, 0.0, 0.0],
+    "PRO": [5.0, 530.0, 137.0],
+    "PRI": [5.0, 262.5, 453.0],
+    "RKP": [5.0, 225.0, 420.0],
+    "SHR": [5.0, 234.6, 474.2]
+  },
+  "point_descriptions": {
+    "UAF": "Upper A-arm, front chassis pivot",
+    "UAA": "Upper A-arm, aft chassis pivot",
+    "LAF": "Lower A-arm, front chassis pivot",
+    "LAA": "Lower A-arm, aft chassis pivot",
+    "RTI": "Toe link inner end (fixed on the chassis)",
+    "SHC": "Damper chassis end",
+    "UBJ": "Upper ball joint",
+    "LBJ": "Lower ball joint",
+    "RTO": "Toe link outer end (on the upright, behind the axle)",
+    "WC": "Wheel center",
+    "CP": "Tire contact patch center",
+    "PRO": "Pushrod outer end (bracket on the lower A-arm)",
+    "PRI": "Pushrod inner end (on the rocker)",
+    "RKP": "Rocker pivot (on its rotation axis, on the chassis)",
+    "SHR": "Damper end on the rocker"
+  }
+}
