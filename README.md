@@ -163,6 +163,10 @@ and parts are rigid (no compliance in bushes or the rocker).
 | `bj_spread` | distance between the ball joints (mm), for joint and arm loads | 210 | 211 | 195 |
 | `kpi` | kingpin inclination (deg) | 5.5 | 5.4 | 5.9 |
 
+(These "optimised" numbers are the optimiser's own output. The file has since
+had the Phase 4 anti-dive and Ackermann changes applied, which move RC height
+to 27.5 mm and bump steer to 0.007°; see Phase 4 below.)
+
 Two more goals are available but not switched on in the default config:
 `motion_ratio` (static damper/wheel ratio) and `anti_dive` (%). Rocker points
 (`PRO`, `PRI`, `RKP`, `SHR`, `SHC`) can be used as variables too.
@@ -248,7 +252,8 @@ trail) is in the sweep output too.
 
 The baseline has about −2% anti-dive (very slightly pro-dive): its arm pivots
 are nearly level in side view. Lowering the lower arm's front pivot 5 mm and
-raising its rear pivot 5 mm gives about 19%.
+raising its rear pivot 5 mm gives about 19% (see *Applied to the optimised
+design* below).
 
 ### Steering and Ackermann
 
@@ -272,6 +277,32 @@ with it.
 
 Race cars often run well under 100% Ackermann, because at speed the loaded
 outside tyre works at a bigger slip angle. It's a tuning choice.
+
+### Applied to the optimised design
+
+`data/optimized_front.json` now carries both changes on top of the Phase 2
+optimiser result (the baseline is left as it was, as the "before"):
+
+| Change | Why |
+|---|---|
+| Lower-arm front pivot (`LAF`) 5 mm down, rear pivot (`LAA`) 5 mm up | anti-dive |
+| Outer tie-rod end (`RTO`) 20 mm outboard | Ackermann |
+| Rack (`RTI`) 0.6 mm outboard and 0.7 mm down | cancels the bump steer the `RTO` move added |
+
+| | Before | After |
+|---|---|---|
+| Anti-dive | −0.6% | 22% |
+| Ackermann at full lock | −16% | +17% |
+| Toe change over ±50 mm (bump steer) | 0.019° | 0.007° |
+| Camber gain per 10 mm | −0.445° | −0.442° |
+| Roll-centre height | 28.0 mm | 27.5 mm |
+| Roll-centre movement vs chassis | −0.051 | −0.055 |
+| `RTO` clearance to the rim barrel / hub face | | 5.9 mm / 6.4 mm |
+
+Caster, KPI, scrub, trail and motion ratio don't change. The rack position was
+found with a quick two-variable search for the smallest toe change over the
+sweep. The `RTO` move uses up most of the room left inside the rim, so it's
+about as far as it can go there.
 
 ## Working on more than one PC
 

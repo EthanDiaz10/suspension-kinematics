@@ -1,6 +1,6 @@
 {
   "name": "Optimised FSAE-style front corner (front-left)",
-  "description": "Output of `suspkin optimize data/baseline_fsae_front.json data/optimize_front.json`. Roll-centre movement vs the chassis cut from -0.38 to -0.05 mm per mm of travel while keeping ball-joint spread and KPI close to the baseline, inside the 10 inch rim envelope.",
+  "description": "Output of `suspkin optimize data/baseline_fsae_front.json data/optimize_front.json`, then hand-tuned in Phase 4: lower-arm front pivot 5 mm down and rear pivot 5 mm up (anti-dive -1% -> 22%), outer tie-rod end 20 mm outboard (Ackermann -16% -> +17%), and the rack moved 0.6 mm out / 0.7 mm down to cancel the extra bump steer. Inside the 10 inch rim envelope.",
   "units": "mm",
   "coordinate_system": "SAE/ISO vehicle axes: +X forward, +Y left, +Z up. Origin on the ground plane, on the car centerline, at the front axle line.",
   "side": "front-left",
@@ -21,32 +21,6 @@
     "brakes": "outboard",
     "driven": false
   },
-  "static_camber_deg": -1.0,
-  "static_toe_deg": 0.0,
-  "chassis": {
-    "UAF": [110.0, 290.0, 281.3865],
-    "UAA": [-120.0, 290.0, 271.3865],
-    "LAF": [130.0, 195.003, 119.6114],
-    "LAA": [-130.0, 195.003, 114.6114],
-    "RTI": [65.0, 195.0047, 122.9352],
-    "SHC": [5.0, 34.6, 474.2]
-  },
-  "upright": {
-    "UBJ": [-8.0, 555.0, 335.7599],
-    "LBJ": [5.0, 575.0, 142.5353],
-    "RTO": [68.0, 565.0, 150.0],
-    "WC": [0.0, 610.0, 228.0],
-    "CP": [0.0, 610.0, 0.0]
-  },
-  "rocker": {
-    "_note": "Pushrod and rocker (bellcrank). The rocker spins about 'axis' through RKP. See solver/suspkin/rocker.py.",
-    "pushrod_mount": "lower_arm",
-    "axis": [1.0, 0.0, 0.0],
-    "PRO": [5.0, 540.0, 154.54],
-    "PRI": [5.0, 262.5, 453.0],
-    "RKP": [5.0, 225.0, 420.0],
-    "SHR": [5.0, 234.6, 474.2]
-  },
   "point_descriptions": {
     "UAF": "Upper A-arm, front chassis pivot",
     "UAA": "Upper A-arm, aft chassis pivot",
@@ -63,5 +37,31 @@
     "PRI": "Pushrod inner end (on the rocker)",
     "RKP": "Rocker pivot (on its rotation axis, on the chassis)",
     "SHR": "Damper end on the rocker"
+  },
+  "static_camber_deg": -1.0,
+  "static_toe_deg": 0.0,
+  "chassis": {
+    "UAF": [110.0, 290.0, 281.3865],
+    "UAA": [-120.0, 290.0, 271.3865],
+    "LAF": [130.0, 195.003, 114.6114],
+    "LAA": [-130.0, 195.003, 119.6114],
+    "RTI": [65.0, 195.6, 122.22],
+    "SHC": [5.0, 34.6, 474.2]
+  },
+  "upright": {
+    "UBJ": [-8.0, 555.0, 335.7599],
+    "LBJ": [5.0, 575.0, 142.5353],
+    "RTO": [68.0, 585.0, 150.0],
+    "WC": [0.0, 610.0, 228.0],
+    "CP": [0.0, 610.0, 0.0]
+  },
+  "rocker": {
+    "_note": "Pushrod and rocker (bellcrank). The rocker spins about 'axis' through RKP. See solver/suspkin/rocker.py.",
+    "pushrod_mount": "lower_arm",
+    "axis": [1.0, 0.0, 0.0],
+    "PRO": [5.0, 540.0, 154.54],
+    "PRI": [5.0, 262.5, 453.0],
+    "RKP": [5.0, 225.0, 420.0],
+    "SHR": [5.0, 234.6, 474.2]
   }
 }

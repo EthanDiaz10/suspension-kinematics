@@ -99,3 +99,15 @@ def test_cli_steer_writes_outputs(tmp_path):
     main(["steer", str(DATA), "--rack", "10", "--step", "2", "--out", str(tmp_path)])
     for suffix in ("_steer.csv", "_steer.png"):
         assert (tmp_path / f"{DATA.stem}{suffix}").exists()
+
+
+def test_optimised_design_has_pro_ackermann_and_anti_dive():
+    """The Phase 4 changes applied to data/optimized_front.json."""
+    opt = sk.load_hardpoints(DATA.parent / "optimized_front.json")
+    v = sk.VehicleParams.from_hardpoints(opt)
+    steer = sk.steering_summary(sk.steering_metrics(sk.steer_sweep(opt, 25, 1), v))
+    assert steer["ackermann_at_lock_pct"] > 10
+    bump = sk.summary(sk.compute_metrics(sk.bump_sweep(opt, 50, 2), v), v)
+    assert 15 < bump["anti_dive_pct"] < 30
+    assert bump["toe_range_deg"] < 0.02
+    assert all(c.ok for c in sk.check_packaging(opt))
