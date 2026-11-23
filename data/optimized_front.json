@@ -1,6 +1,6 @@
 {
   "name": "Optimised FSAE-style front corner (front-left)",
-  "description": "Output of `suspkin optimize data/baseline_fsae_front.json data/optimize_front.json`, then hand-tuned in Phase 4: lower-arm front pivot 5 mm down and rear pivot 5 mm up (anti-dive -1% -> 22%), outer tie-rod end 20 mm outboard (Ackermann -16% -> +17%), and the rack moved 0.6 mm out / 0.7 mm down to cancel the extra bump steer. Inside the 10 inch rim envelope.",
+  "description": "Phase 6: front anti-roll bar added (6.5 N m/deg), static camber set to -1.6 deg so the outside tyre is at about -1 deg at 1.5 g, and the upper ball joint lowered 2 mm to keep it inside the rim at the new camber. Earlier: output of `suspkin optimize data/baseline_fsae_front.json data/optimize_front.json`, then hand-tuned in Phase 4: lower-arm front pivot 5 mm down and rear pivot 5 mm up (anti-dive -1% -> 22%), outer tie-rod end 20 mm outboard (Ackermann -16% -> +17%), and the rack moved 0.6 mm out / 0.7 mm down to cancel the extra bump steer. Inside the 10 inch rim envelope.",
   "units": "mm",
   "coordinate_system": "SAE/ISO vehicle axes: +X forward, +Y left, +Z up. Origin on the ground plane, on the car centerline, at the front axle line.",
   "side": "front-left",
@@ -13,14 +13,21 @@
     "checked_points": ["UBJ", "LBJ", "RTO"]
   },
   "vehicle": {
-    "_note": "Whole-car numbers for anti-dive / anti-squat, Ackermann and roll stiffness (see solver/suspkin/sideview.py). spring_rate_n_per_mm is one corner's spring (35 N/mm is about 200 lb/in). Made-up FSAE-sized values.",
+    "_note": "Whole-car numbers for anti-dive / anti-squat, Ackermann and roll stiffness (see solver/suspkin/sideview.py). spring_rate_n_per_mm is one corner's spring (35 N/mm is about 200 lb/in). mass_kg is car + driver; the rear_* numbers are placeholders until the rear corner is designed. Made-up FSAE-sized values.",
     "axle": "front",
     "wheelbase_mm": 1550.0,
     "cg_height_mm": 290.0,
     "front_brake_bias": 0.65,
     "brakes": "outboard",
     "driven": false,
-    "spring_rate_n_per_mm": 35.0
+    "spring_rate_n_per_mm": 35.0,
+    "mass_kg": 280.0,
+    "front_weight_fraction": 0.47,
+    "rear_track_mm": 1200.0,
+    "rear_roll_stiffness_nm_per_deg": 400.0,
+    "rear_rc_height_mm": 45.0,
+    "design_lateral_g": 1.5,
+    "target_outside_camber_deg": -1.0
   },
   "point_descriptions": {
     "UAF": "Upper A-arm, front chassis pivot",
@@ -39,7 +46,7 @@
     "RKP": "Rocker pivot (on its rotation axis, on the chassis)",
     "SHR": "Damper end on the rocker"
   },
-  "static_camber_deg": -1.0,
+  "static_camber_deg": -1.6,
   "static_toe_deg": 0.0,
   "chassis": {
     "UAF": [110.0, 290.0, 281.3865],
@@ -50,7 +57,7 @@
     "SHC": [5.0, 34.6, 474.2]
   },
   "upright": {
-    "UBJ": [-8.0, 555.0, 335.7599],
+    "UBJ": [-8.0, 555.0, 333.7599],
     "LBJ": [5.0, 575.0, 142.5353],
     "RTO": [68.0, 585.0, 150.0],
     "WC": [0.0, 610.0, 228.0],
@@ -64,5 +71,13 @@
     "PRI": [5.0, 262.5, 453.0],
     "RKP": [5.0, 225.0, 420.0],
     "SHR": [5.0, 234.6, 474.2]
+  },
+  "arb": {
+    "_note": "Front anti-roll bar (U-bar). A drop link runs from ARL on the rocker down to the end of the bar's arm (ARA); the arm joins the bar at ARP and the bar runs straight across the car (Y axis). See solver/suspkin/arb.py. Rate chosen in Phase 6 for ~51% front lateral load transfer.",
+    "link_mount": "rocker",
+    "rate_nm_per_deg": 6.5,
+    "ARL": [5.0, 200.0, 405.0],
+    "ARA": [5.0, 200.0, 330.0],
+    "ARP": [-75.0, 200.0, 330.0]
   }
 }

@@ -218,8 +218,13 @@ def plot_roll(roll: dict[str, np.ndarray], path: str | Path | None = None,
     ax.legend(frameon=False, fontsize=9, labelcolor=INK_MUTED)
 
     ax = axes[1, 2]
-    ax.plot(r, roll["spring_roll_moment_nm"], color=SERIES[0], linewidth=2)
-    _style(ax, "Roll moment the springs push back with", "N·m  (springs only, no anti-roll bar)")
+    ax.plot(r, roll["spring_roll_moment_nm"], color=SERIES[0], linewidth=2, label="springs")
+    if np.any(roll["bar_roll_moment_nm"] != 0):  # only show the bar when there is one
+        ax.plot(r, roll["bar_roll_moment_nm"], color=SERIES[1], linewidth=2, label="anti-roll bar")
+        ax.plot(r, roll["total_roll_moment_nm"], color=INK_MUTED, linewidth=1.5,
+                linestyle="--", label="total")
+        ax.legend(frameon=False, fontsize=9, labelcolor=INK_MUTED)
+    _style(ax, "Roll moment pushing back", "N·m")
     ax.set_xlabel(ROLL_XLABEL, fontsize=9, color=INK_MUTED)
 
     fig.suptitle(title, x=0.01, ha="left", fontsize=13, color=INK, fontweight="bold")
@@ -231,12 +236,13 @@ def plot_roll(roll: dict[str, np.ndarray], path: str | Path | None = None,
 
 
 def plot_roll_front_view(rp, path: str | Path | None = None, title: str | None = None,
-                         tyre_width: float = 180.0) -> plt.Figure:
+                         tyre_width: float = 180.0, arb_mount: str = "rocker") -> plt.Figure:
     """Front view of the whole axle at one roll angle, as seen from the road.
 
     ``rp`` is a ``RollPose`` (see ``roll.py``). Draws both corners, the tyres,
     the body centreline, and the roll-centre construction: a line from each
     contact patch through its instant centre, crossing at the roll centre.
+    ``arb_mount`` is what the bar's drop link hangs off (only used to draw it).
     """
     from .roll import mirror_point, roll_center_chassis  # avoid an import loop
 
@@ -246,6 +252,10 @@ def plot_roll_front_view(rp, path: str | Path | None = None, title: str | None =
             ("RTI", "RTO"), ("UBJ", "LBJ")]
     if "SHR" in rp.left.points:
         segs += [("PRO", "PRI"), ("RKP", "PRI"), ("RKP", "SHR"), ("PRI", "SHR"), ("SHR", "SHC")]
+    if "ARA" in rp.left.points:  # anti-roll bar drop link and arm
+        segs += [("ARL", "ARA"), ("ARA", "ARP")]
+        if arb_mount == "rocker" and "RKP" in rp.left.points:
+            segs += [("RKP", "ARL")]  # the tab on the rocker the drop link bolts to
     sides = (("left", rp.left.points, rp.left, SERIES[0]),
              ("right", rp.right_points(), rp.right_src, SERIES[1]))
     for name, pts, src_pose, color in sides:
@@ -262,6 +272,10 @@ def plot_roll_front_view(rp, path: str | Path | None = None, title: str | None =
         corners = np.array([g["WC"] + sr * radius * up + sw * tyre_width / 2 * axis_g
                             for sr, sw in ((1, -1), (1, 1), (-1, 1), (-1, -1), (1, -1))])
         ax.plot(corners[:, 1], corners[:, 2], color=INK_MUTED, linewidth=1)
+
+    if "ARP" in rp.left.points:  # the bar itself, straight across the car
+        a, b = rp.to_ground(rp.left.points["ARP"]), rp.to_ground(rp.right_points()["ARP"])
+        ax.plot([a[1], b[1]], [a[2], b[2]], color=INK_MUTED, linewidth=2.5, label="anti-roll bar")
 
     # Body centreline (the chassis's own vertical axis), to show the lean.
     top, bottom = rp.to_ground(np.array([0.0, 0.0, 450.0])), rp.to_ground(np.array([0.0, 0.0, 0.0]))
@@ -283,7 +297,7 @@ def plot_roll_front_view(rp, path: str | Path | None = None, title: str | None =
     ax.set_aspect("equal")
     # Legend under the plot so it never covers the rocker or the tyres.
     ax.legend(frameon=False, fontsize=8, labelcolor=INK_MUTED, loc="upper center",
-              bbox_to_anchor=(0.5, -0.16), ncol=4)
+              bbox_to_anchor=(0.5, -0.16), ncol=5)
     fig.tight_layout()
     if path is not None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)

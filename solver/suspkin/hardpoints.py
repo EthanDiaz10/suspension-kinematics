@@ -7,7 +7,8 @@ part attaches. Hardpoints come in two groups:
 * **upright points** ride on the upright (the knuckle that carries the wheel)
   and move together as one rigid body.
 
-An optional ``"rocker"`` block adds a pushrod and rocker (see ``rocker.py``).
+An optional ``"rocker"`` block adds a pushrod and rocker (see ``rocker.py``),
+and an optional ``"arb"`` block adds an anti-roll bar (see ``arb.py``).
 With it, the damper runs from ``SHC`` on the chassis to ``SHR`` on the rocker,
 and the upright no longer needs the direct-acting placeholder point ``SHU``.
 
@@ -24,6 +25,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .arb import ARBGeometry, arb_to_dict, parse_arb
 from .rocker import ROCKER_POINTS, RockerGeometry
 
 # The names every hardpoint file must provide.
@@ -59,6 +61,7 @@ class Hardpoints:
     static_toe_deg: float = 0.0
     extra: dict = field(default_factory=dict)  # descriptions, notes, etc.
     rocker: RockerGeometry | None = None       # None = direct-acting damper
+    arb: ARBGeometry | None = None             # None = no anti-roll bar
 
     def find_point(self, name: str) -> np.ndarray:
         """The (mutable) array for any named point, whichever group it's in.
@@ -66,7 +69,8 @@ class Hardpoints:
         Handy for the optimiser, which nudges points by name.
         """
         for group in (self.chassis, self.upright,
-                      self.rocker.points if self.rocker else {}):
+                      self.rocker.points if self.rocker else {},
+                      self.arb.points if self.arb else {}):
             if name in group:
                 return group[name]
         raise KeyError(f"no hardpoint called {name!r}")
@@ -86,6 +90,7 @@ class Hardpoints:
             static_toe_deg=self.static_toe_deg,
             extra=dict(self.extra),
             rocker=self.rocker.copy() if self.rocker else None,
+            arb=self.arb.copy() if self.arb else None,
         )
 
 
@@ -111,7 +116,11 @@ def load_hardpoints(path: str | Path) -> Hardpoints:
     for k, v in raw["upright"].items():
         upright.setdefault(k, np.asarray(v, dtype=float))
 
-    known = {"name", "chassis", "upright", "static_camber_deg", "static_toe_deg", "rocker"}
+    arb = parse_arb(raw["arb"], source=str(path)) if "arb" in raw else None
+    if arb is not None and arb.link_mount == "rocker" and rocker is None:
+        raise ValueError(f"{path}: the anti-roll bar hangs off the rocker, but there is no 'rocker' block")
+
+    known = {"name", "chassis", "upright", "static_camber_deg", "static_toe_deg", "rocker", "arb"}
     return Hardpoints(
         name=raw.get("name", Path(path).stem),
         chassis=read_group("chassis", CHASSIS_POINTS),
@@ -120,6 +129,7 @@ def load_hardpoints(path: str | Path) -> Hardpoints:
         static_toe_deg=float(raw.get("static_toe_deg", 0.0)),
         extra={k: v for k, v in raw.items() if k not in known},
         rocker=rocker,
+        arb=arb,
     )
 
 
@@ -165,6 +175,8 @@ def save_hardpoints(hp: Hardpoints, path: str | Path) -> None:
             "axis": [round(float(c), 6) for c in r.axis],
             **{k: [round(float(c), 4) for c in v] for k, v in r.points.items()},
         }
+    if hp.arb is not None:
+        out["arb"] = arb_to_dict(hp.arb)
     Path(path).write_text(dumps_compact(out) + "\n")
 
 

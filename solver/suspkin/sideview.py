@@ -58,6 +58,15 @@ DEFAULT_VEHICLE = {
     "brakes": "outboard",      # "outboard" (in the wheel) or "inboard" (on the chassis)
     "driven": False,           # does this axle put down drive torque?
     "spring_rate_n_per_mm": 35.0,  # one corner's spring (~200 lb/in), for roll stiffness
+    # Whole-car numbers for roll per g and the front/rear load transfer split
+    # (roll.py). The rear ones are placeholders until the rear corner exists.
+    "mass_kg": 280.0,                       # car + driver
+    "front_weight_fraction": 0.47,          # share of the weight on the front axle
+    "rear_track_mm": 1200.0,
+    "rear_roll_stiffness_nm_per_deg": 400.0,  # rear springs + rear bar
+    "rear_rc_height_mm": 45.0,
+    "design_lateral_g": 1.5,                # the cornering load to design camber for
+    "target_outside_camber_deg": -1.0,      # outside-tyre camber wanted at that load
 }
 
 
@@ -72,6 +81,13 @@ class VehicleParams:
     brakes: str = "outboard"
     driven: bool = False
     spring_rate_n_per_mm: float = 35.0  # used by the roll sweep (roll.py)
+    mass_kg: float = 280.0
+    front_weight_fraction: float = 0.47
+    rear_track_mm: float = 1200.0
+    rear_roll_stiffness_nm_per_deg: float = 400.0
+    rear_rc_height_mm: float = 45.0
+    design_lateral_g: float = 1.5
+    target_outside_camber_deg: float = -1.0
 
     @classmethod
     def from_dict(cls, raw: dict | None) -> "VehicleParams":
@@ -85,6 +101,13 @@ class VehicleParams:
             brakes=str(cfg["brakes"]),
             driven=bool(cfg["driven"]),
             spring_rate_n_per_mm=float(cfg["spring_rate_n_per_mm"]),
+            mass_kg=float(cfg["mass_kg"]),
+            front_weight_fraction=float(cfg["front_weight_fraction"]),
+            rear_track_mm=float(cfg["rear_track_mm"]),
+            rear_roll_stiffness_nm_per_deg=float(cfg["rear_roll_stiffness_nm_per_deg"]),
+            rear_rc_height_mm=float(cfg["rear_rc_height_mm"]),
+            design_lateral_g=float(cfg["design_lateral_g"]),
+            target_outside_camber_deg=float(cfg["target_outside_camber_deg"]),
         )
         if v.axle not in ("front", "rear"):
             raise ValueError(f"vehicle axle must be 'front' or 'rear', not {v.axle!r}")
