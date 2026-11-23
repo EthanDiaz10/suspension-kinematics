@@ -212,3 +212,15 @@ def test_step_export(built, tmp_path):
     vol = write_step(parts["pushrod_bracket"], tmp_path / "b.step")
     text = (tmp_path / "b.step").read_text(errors="ignore")
     assert text.startswith("ISO-10303-21") and vol > 1000
+
+
+@needs_fea
+def test_fea_fillets_round_the_rocker_corners(built, tmp_path):
+    """The arm-to-pivot-tube corners get rounded: the filleted rocker is a bit heavier."""
+    from suspkin.fea import write_step
+    hp, parts, _ = built["front"]
+    rocker = parts["rocker"]
+    sharp = write_step(rocker, tmp_path / "r0.step")
+    rounded = write_step(rocker, tmp_path / "r3.step", fillet_mm=3.0)
+    assert rounded > sharp
+    assert not any("couldn't" in n for n in rocker.notes), rocker.notes

@@ -644,8 +644,105 @@ the worst for the lower ball joint). The bore's reaction is then the tyre
 load, so the joint forces and the tyre load are consistent.
 
 **Simplifications:** loads are applied at ride-height geometry, the tyres' own
-overturning and rolling-resistance moments are ignored, parts are rigid, and
-the rocker, damper and anti-roll bar forces aren't computed yet.
+overturning and rolling-resistance moments are ignored, and parts are rigid.
+Since Phase 9 the rocker, damper and anti-roll bar forces are computed too
+(next section).
+
+## Uprights, rockers and stress analysis (Phase 9)
+
+Phase 8 sized the tubes. Phase 9 designs the **chunky parts** that hold them:
+the **upright**, the **rocker** and the **pushrod bracket**, then checks
+their stress three ways: hand calculations, a quick built-in finite element
+(FE) analysis, and a final study in Ansys Student, which you run yourself.
+The step-by-step for Fusion and Ansys is in
+[`docs/phase9-fea-guide.md`](docs/phase9-fea-guide.md).
+
+```bash
+suspkin loads data/optimized_front.json data/optimized_rear.json      # now with rocker loads
+suspkin parts data/optimized_front.json data/optimized_rear.json      # geometry + hand calcs
+suspkin parts data/optimized_front.json data/optimized_rear.json --step --fea --converge
+```
+
+`--step` and `--fea` need the optional extras: `pip install -e ".[fea]"`
+(gmsh, scikit-fem, pyamg).
+
+### 1. Rocker, damper and anti-roll bar loads
+
+The pushrod carries the spring *and* the anti-roll bar, because the bar's drop
+link hangs off the same rocker. The rocker can only spin about its pivot, so
+it gives one equation for two unknowns (the damper force and the drop link
+force). The split comes from how the car moves. In **heave** (braking, a
+bump) the bar doesn't twist, so the spring takes everything. In **roll**,
+spring and bar deflect together and share the load in proportion to their
+roll stiffness (front: the bar is 41% of it, rear: 28%). Each cornering case
+is split into a heave part and a roll part using its inside and outside wheel.
+The pivot then carries what's left, shared between its two bearings.
+
+| Front rocker | Pushrod | Damper | ARB link | Pivot |
+|---|---|---|---|---|
+| Ride height | 0.90 kN | 0.83 kN | 0 | 0.70 kN |
+| Cornering 1.6 g (outside) | 1.56 kN | 1.17 kN | 0.58 kN | 1.73 kN |
+| 3 g bump | 2.71 kN | 2.50 kN | 0 | 2.09 kN |
+
+(All in compression. The rear is similar, with a 3.1 kN pushrod in the bump.)
+
+Two independent checks are in the tests. A **virtual work** check: for a
+tiny bump, the work done by the tyre load equals the work done on the damper,
+with the motion taken from the kinematic solver. And a **bar torque** check:
+the drop link force times the bar's arm (47 N·m at 1.6 g) equals the bar's
+rate times its twist from the roll model, within 2%.
+
+One thing this shows: in the 3 g bump the damper is pushed 48 mm past ride
+height on the spring alone, more than the damper's stroke on the bump side.
+So a **bump stop** has to catch that case, and its stiffness decides the
+peak load. Worth choosing when you pick the damper.
+
+### 2. Rim clearance and a hardpoint change
+
+The first upright didn't fit: the upper ball joint's centre was 9 mm from the
+rim, and a real spherical bearing housing needs about 13 mm. So both upper
+ball joints moved **6 mm down**. Static camber went to **-1.75°** to keep the
+outside tyre at -1° at 1.5 g, and the inner tie rod / toe link end moved about
+1 mm to cancel the extra bump steer it caused (back to 0.001° over ±50 mm).
+The cost: camber gain is 10% lower (-0.38°/10 mm), and the roll centres are
+about 7 mm lower (front 17 mm, rear 25 mm), which adds a little roll (0.84°/g,
+was 0.82). The upright now clears the rim by 1.5 mm.
+
+### 3. The parts
+
+![Parts](docs/images/parts.png)
+
+Each part is built straight from the hardpoints out of simple cylinders and
+boxes (`solver/suspkin/parts.py`), with sizes in
+[`data/parts.json`](data/parts.json). Change a hardpoint or a size and every
+part follows. The same description feeds the Fusion script
+(`cad/fusion/SuspensionParts`), the STEP export and the built-in FE.
+
+| Part | Material | What it is |
+|---|---|---|
+| Upright | 7075-T6 | Housing for two 61908 thin-section bearings, pressed-in spherical bearings at the ball joints (axis fore-aft, so nothing sticks out toward the rim), steering / toe-link arm, axial-mount caliper lugs behind the axle |
+| Rocker | 7075-T6 | Two 6 mm plates (double shear) on a pivot tube with two 6201 bearings |
+| Pushrod bracket | 4130 | Two 3 mm tabs welded to the lower wishbone |
+
+**How the upright is held in a stress study.** The bearing bore is fixed and
+the joint forces go into the ball joint and steering arm holes. One catch: a
+wheel bearing can't carry torque about the axle, so under braking the brake
+torque goes through the **caliper lugs**. `suspkin parts` works out the lug
+forces (bolt-group method), and a test checks that their moment about the axle
+equals the tyre's.
+
+RESULTS_TABLE_PLACEHOLDER
+
+### Files it writes (in `results/`)
+
+| File | What's in it |
+|---|---|
+| `*_parts.json` | Part shapes and loads, for the Fusion script |
+| `*_upright.step`, `*_rocker.step`, `*_pushrod_bracket.step` | One STEP per part (with `--step`) |
+| `parts_fea_loads.csv` | Every force to type into Ansys: part, case, hole, hole centre, Fx, Fy, Fz |
+| `parts_hand_calcs.csv` | Every hand calc, with the formula's inputs |
+| `parts_fea.csv` | The quick FE results and mesh convergence (with `--fea`) |
+| `*_rocker_loads.csv` | Damper, drop link, pivot and bearing loads (from `suspkin loads`) |
 
 ## Working on more than one PC
 
@@ -692,8 +789,10 @@ Tips:
 - [ ] Draw the anti-roll bar in the Fusion script
 - [x] **Phase 7:** rear corner (toe link, anti-squat and anti-lift, rear anti-roll bar), `suspkin car` for the whole-car roll stiffness split, load transfer, roll per g and tyre loads, rear corner in the Fusion script
 - [x] **Phase 8:** load cases, tyre loads, the force in every link, tube (yield, Euler/Johnson buckling) and rod end checks, lightest passing tube, upright loads exported for a Fusion stress check
-- [ ] Rocker, damper and anti-roll bar forces; joint loads at full bump instead of ride height
-- [ ] **Phase 9:** full-car Fusion assembly, renders and a design report
+- [x] **Phase 9:** rocker, damper and anti-roll bar forces; upright, rocker and pushrod bracket designed around the hardpoints; hand calcs, STEP export, built-in FE check with mesh convergence; Fusion parts script; Ansys Student guide
+- [ ] Joint loads at full bump instead of ride height
+- [ ] Topology optimisation / pocketing of the upright to save weight
+- [ ] **Phase 10:** full-car Fusion assembly, renders and a design report
 
 ## License
 

@@ -85,15 +85,128 @@ def _add_solid(occ, s) -> int:
         return occ.addCylinder(*s.p1, *d, s.radius)
     if isinstance(s, Box):
         tag = occ.addBox(-s.length / 2, -s.width / 2, -s.height / 2, s.length, s.width, s.height)
-        r = np.column_stack([s.length_dir, s.width_dir, s.height_dir])
-        m = np.hstack([r, s.center.reshape(3, 1)])
-        occ.affineTransform([(3, tag)], list(m.ravel()))
+        # Turn it into place with a true rotation (an affine transform would
+        # turn its flat faces into spline surfaces), then move it.
+        from scipy.spatial.transform import Rotation
+        rv = Rotation.from_matrix(np.column_stack([s.length_dir, s.width_dir, s.height_dir])).as_rotvec()
+        angle = float(np.linalg.norm(rv))
+        if angle > 1e-12:
+            occ.rotate([(3, tag)], 0, 0, 0, *(rv / angle), angle)
+        occ.translate([(3, tag)], *s.center)
         return tag
     raise TypeError(type(s))
 
 
-def build_occ(part: Part):
-    """Make the part in gmsh's current model; returns its volume tags."""
+def _edges_of(vol: int) -> list[int]:
+    import gmsh
+    out = set()
+    for _, srf in gmsh.model.getBoundary([(3, vol)], combined=False, oriented=False):
+        for _, c in gmsh.model.getBoundary([(2, srf)], combined=False, oriented=False):
+            out.add(abs(c))
+    return sorted(out)
+
+
+def _junction_edges(vol: int, cyl: Cylinder) -> list[int]:
+    """Edges where something meets the side of a cylinder (not its round end edges).
+
+    These are the inside corners where an arm joins a housing or boss.
+    """
+    import gmsh
+    a = cyl.axis
+    out = []
+    for c in _edges_of(vol):
+        lo, hi = gmsh.model.getParametrizationBounds(1, c)
+        ts = np.linspace(lo[0], hi[0], 7)
+        pts = np.array([gmsh.model.getValue(1, c, [t]) for t in ts])
+        rel = pts - cyl.p1
+        ax = rel @ a
+        rad = np.linalg.norm(rel - np.outer(ax, a), axis=1)
+        on_side = np.all(np.abs(rad - cyl.radius) < 1e-3) and np.all(ax > -1e-3) and np.all(ax < cyl.length + 1e-3)
+        if on_side and np.ptp(ax) > 1e-3:    # a round end edge has constant ax
+            out.append(c)
+    return out
+
+
+def _concave_plane_edges(vol: int) -> list[int]:
+    """Inside (re-entrant) corners where two flat faces meet, e.g. arm meets arm.
+
+    For each edge shared by two flat faces: step from the edge into face 1
+    (towards its centre). At a convex (outside) edge that step goes against
+    face 2's outward normal; at a concave (inside) edge it goes with it.
+    """
+    import gmsh
+    out = []
+    for c in _edges_of(vol):
+        faces = [abs(f) for f in gmsh.model.getAdjacencies(1, c)[0]]
+        faces = [f for f in faces if gmsh.model.getType(2, f) == "Plane"]
+        if len(faces) != 2:
+            continue
+        lo, hi = gmsh.model.getParametrizationBounds(1, c)
+        m = np.array(gmsh.model.getValue(1, c, [(lo[0] + hi[0]) / 2]))
+        normals, centres = [], []
+        for f in faces:
+            ctr = np.array(gmsh.model.occ.getCenterOfMass(2, f))
+            uv = gmsh.model.getParametrization(2, f, list(ctr))
+            normals.append(np.array(gmsh.model.getNormal(f, uv)))
+            centres.append(ctr)
+        t1 = centres[0] - m
+        if np.linalg.norm(t1) < 1e-9:
+            continue
+        if (t1 / np.linalg.norm(t1)) @ normals[1] > 0.05:
+            out.append(c)
+    return out
+
+
+def _fillet_junctions(vol: int, part: Part, radius: float) -> tuple[int, list[str]]:
+    """Round the inside corners where arms meet the cylinders (housing, bosses).
+
+    Sharp inside corners have (in theory) infinite stress, so the peak never
+    converges as the mesh gets finer. Real parts are filleted, so we fillet
+    them here too. Tries each cylinder in turn and shrinks the radius if the
+    CAD kernel can't fit it; anything it can't round is listed in the notes.
+    """
+    import gmsh
+    occ = gmsh.model.occ
+    notes = []
+    for cyl in [s for s in part.solids if isinstance(s, Cylinder)]:
+        edges = _junction_edges(vol, cyl)
+        if not edges:
+            continue
+        for r in (radius, 0.75 * radius, 0.5 * radius):
+            try:
+                out = occ.fillet([vol], edges, [r], removeVolume=False)
+                occ.remove([(3, vol)], recursive=True)   # keep only the filleted copy
+                occ.synchronize()
+                vol = out[0][1]
+                if r < radius:
+                    notes.append(f"{cyl.name}: fillet reduced to {r:g} mm")
+                break
+            except Exception:
+                occ.synchronize()
+        else:
+            notes.append(f"{cyl.name}: couldn't fillet (left sharp)")
+    # Then inside corners between flat faces (arm meeting arm, arm meeting its
+    # root block), all at once. One at a time is tempting, but a fillet the
+    # kernel half-manages can leave a broken solid, so if the set fails they
+    # stay sharp (and the notes say so).
+    edges = _concave_plane_edges(vol)
+    if edges:
+        try:
+            out = occ.fillet([vol], edges, [radius], removeVolume=False)
+            occ.remove([(3, vol)], recursive=True)
+            occ.synchronize()
+            vol = out[0][1]
+        except Exception:
+            occ.synchronize()
+            notes.append(f"{len(edges)} flat inside corner(s) couldn't be filleted (left sharp)")
+    return vol, notes
+
+
+def build_occ(part: Part, fillet_mm: float = 0.0):
+    """Make the part in gmsh's current model; returns its volume tags.
+
+    ``fillet_mm`` > 0 rounds the arm-to-cylinder corners before the holes are cut.
+    """
     import gmsh
     occ = gmsh.model.occ
     tags = [(3, _add_solid(occ, s)) for s in part.solids]
@@ -101,6 +214,12 @@ def build_occ(part: Part):
         fused, _ = occ.fuse(tags[:1], tags[1:])
     else:
         fused = tags
+    occ.synchronize()
+    part.notes = [n for n in part.notes if not n.startswith("FEA fillet:")]
+    if fillet_mm > 0 and len(fused) == 1:
+        vol, notes = _fillet_junctions(fused[0][1], part, fillet_mm)
+        fused = [(3, vol)]
+        part.notes += [f"FEA fillet: {n}" for n in notes]
     cuts = [(3, _add_solid(occ, c)) for c in part.cuts]
     if cuts:
         fused, _ = occ.cut(fused, cuts)
@@ -110,7 +229,7 @@ def build_occ(part: Part):
     return [t for _, t in fused]
 
 
-def write_step(part: Part, path: str | Path) -> float:
+def write_step(part: Part, path: str | Path, fillet_mm: float = 0.0) -> float:
     """Write the part as STEP (mm). Returns its volume in mm^3."""
     _require()
     import gmsh
@@ -118,7 +237,7 @@ def write_step(part: Part, path: str | Path) -> float:
     try:
         gmsh.option.setNumber("General.Terminal", 0)
         gmsh.model.add(part.name)
-        tags = build_occ(part)
+        tags = build_occ(part, fillet_mm)
         vol = sum(gmsh.model.occ.getMass(3, t) for t in tags)
         with _quiet():
             gmsh.write(str(path))
@@ -127,14 +246,14 @@ def write_step(part: Part, path: str | Path) -> float:
         gmsh.finalize()
 
 
-def mesh_part(part: Part, size: float):
+def mesh_part(part: Part, size: float, fillet_mm: float = 0.0):
     """Tet mesh of the part: (node coordinates N x 3, tets M x 4 corner node indices)."""
     import gmsh
     gmsh.initialize()
     try:
         gmsh.option.setNumber("General.Terminal", 0)
         gmsh.model.add(part.name)
-        build_occ(part)
+        build_occ(part, fillet_mm)
         gmsh.option.setNumber("Mesh.MeshSizeMax", size)
         gmsh.option.setNumber("Mesh.MeshSizeMin", size / 4)
         gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 12)  # ~12 elements round each hole
@@ -167,6 +286,9 @@ class FEAResult:
     max_vm_away_mpa: float         # more than `away_mm` from the supports
     where_away: np.ndarray         # location of that peak
     max_disp_mm: float
+    # For plotting (only with keep_field=True): mesh corner points (3 x N),
+    # boundary triangles (3 x F, point indices) and the stress of the element behind each.
+    field: tuple | None = None
 
 
 def _hole_facets(mesh, hole, tol: float) -> np.ndarray:
@@ -190,7 +312,8 @@ def _plane_facets(mesh, point, normal, tol: float) -> np.ndarray:
 
 
 def solve_part(part: Part, load_cases: dict[str, dict[str, np.ndarray]], material: dict,
-               mesh_size: float, away_mm: float = 4.0) -> list[FEAResult]:
+               mesh_size: float, away_mm: float = 4.0, fillet_mm: float = 0.0,
+               keep_field: bool = False) -> list[FEAResult]:
     """Linear static FEA of one part for several load cases (one mesh, one stiffness matrix)."""
     _require()
     import pyamg
@@ -199,7 +322,7 @@ def solve_part(part: Part, load_cases: dict[str, dict[str, np.ndarray]], materia
                        MeshTet, asm, condense)
     from skfem.models.elasticity import lame_parameters, linear_elasticity
 
-    pts, tets = mesh_part(part, mesh_size)
+    pts, tets = mesh_part(part, mesh_size, fillet_mm)
     mesh = MeshTet(pts.T.copy(), tets.T.copy())
     e = ElementVector(ElementTetP2())
     basis = Basis(mesh, e, intorder=2)
@@ -307,8 +430,12 @@ def solve_part(part: Part, load_cases: dict[str, dict[str, np.ndarray]], materia
         i_all = int(np.argmax(vm))
         i_away = int(np.argmax(np.where(away, vm, -1)))
         disp = np.linalg.norm(u.reshape(-1, 3), axis=1).max()
+        field = None
+        if keep_field:
+            bf = mesh.boundary_facets()
+            field = (mesh.p, mesh.facets[:, bf], vm[mesh.f2t[0, bf]])
         out.append(FEAResult(label, mesh_size, mesh.t.shape[1], n, float(vm[i_all]),
-                             float(vm[i_away]), cent[:, i_away], float(disp)))
+                             float(vm[i_away]), cent[:, i_away], float(disp), field))
     return out
 
 
@@ -325,6 +452,55 @@ def _von_mises(basis, u, lam, mu) -> np.ndarray:
 
 
 def convergence(part: Part, label: str, forces: dict[str, np.ndarray], material: dict,
-                sizes: tuple[float, ...]) -> list[FEAResult]:
+                sizes: tuple[float, ...], fillet_mm: float = 0.0) -> list[FEAResult]:
     """The same load case on coarser-to-finer meshes."""
-    return [solve_part(part, {label: forces}, material, s)[0] for s in sizes]
+    return [solve_part(part, {label: forces}, material, s, fillet_mm=fillet_mm)[0] for s in sizes]
+
+
+def plot_stress(panels: list[tuple[str, FEAResult, float]], path: str | Path,
+                required_sf: float = 2.0, views: list[tuple[float, float]] | None = None) -> None:
+    """Von Mises stress on the surface of each part, side by side.
+
+    ``panels`` = (title, result kept with ``keep_field=True``, yield stress).
+    One colour scale (light = low, dark red = high) from 0 to the largest
+    allowable stress (yield / required SF); each title gives the part's own
+    safety factor. ``views`` = (elevation, azimuth) per panel, in degrees.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
+    limit = max(sy for _, _, sy in panels) / required_sf
+    cmap = plt.get_cmap("Reds")
+    fig = plt.figure(figsize=(4.2 * len(panels), 4.6))
+    for i, (title, r, sy) in enumerate(panels):
+        p, tri, vm = r.field
+        ax = fig.add_subplot(1, len(panels), i + 1, projection="3d")
+        verts = p.T[tri.T]
+        colors = cmap(np.clip(vm / limit, 0, 1) * 0.85 + 0.1)
+        # Simple shading so the shape reads in 3D: darker where a face turns away.
+        n = np.cross(verts[:, 1] - verts[:, 0], verts[:, 2] - verts[:, 0])
+        n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-12
+        light = np.array([0.4, -0.5, 0.75])
+        shade = 0.7 + 0.3 * np.abs(n @ (light / np.linalg.norm(light)))
+        colors[:, :3] *= shade[:, None]
+        ax.add_collection3d(Poly3DCollection(verts, facecolors=colors, edgecolors="none"))
+        lo, hi = p.min(axis=1), p.max(axis=1)
+        mid, span = (lo + hi) / 2, (hi - lo).max() / 2
+        ax.set_xlim(mid[0] - span, mid[0] + span)
+        ax.set_ylim(mid[1] - span, mid[1] + span)
+        ax.set_zlim(mid[2] - span, mid[2] + span)
+        ax.set_box_aspect((1, 1, 1))
+        elev, azim = views[i] if views else (18, -60)
+        ax.view_init(elev=elev, azim=azim)
+        ax.set_axis_off()
+        ax.set_title(f"{title}\n{r.case}: peak {r.max_vm_away_mpa:.0f} MPa "
+                     f"(SF {sy / r.max_vm_away_mpa if r.max_vm_away_mpa else 0:.1f})",
+                     fontsize=10, color="#333333")
+    sm = plt.cm.ScalarMappable(cmap=matplotlib.colors.LinearSegmentedColormap.from_list(
+        "r", cmap(np.linspace(0.1, 0.95, 64))), norm=matplotlib.colors.Normalize(0, limit))
+    cb = fig.colorbar(sm, ax=fig.axes, shrink=0.6, pad=0.02)
+    cb.set_label("von Mises stress, MPa", color="#333333")
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)

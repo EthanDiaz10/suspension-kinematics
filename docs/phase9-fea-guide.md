@@ -73,7 +73,7 @@ Everything is written to the `results\` folder:
 | File | What it is |
 |---|---|
 | `optimized_front_parts.json`, `optimized_rear_parts.json` | The part shapes and loads, for the Fusion script |
-| `optimized_front_upright.step` etc. | One STEP file per part, straight into Ansys if you skip Fusion |
+| `optimized_front_upright.step` etc. | One STEP file per part (arm-to-housing corners already filleted), straight into Ansys if you skip Fusion |
 | `parts_fea_loads.csv` | **The forces to type into Ansys**: part, case, hole, hole centre (x, y, z in mm), Fx, Fy, Fz (N) |
 | `parts_hand_calcs.csv` | Hand calcs: beam bending at each arm root, lug checks, bearing and bolt checks |
 | `parts_fea.csv` | Quick FEA results |
@@ -132,8 +132,10 @@ For each part: right-click the **body** in the browser, choose **Save As STEP**
 example, `front_upright_filleted.step`.
 
 > If anything in Fusion goes wrong, you can skip it: the STEP files from
-> step 1 go straight into Ansys. They just don't have fillets, so expect
-> higher peaks at the sharp corners and read section 3.6.
+> step 1 go straight into Ansys. They already have the most important
+> fillets (where the arms meet the bearing housing / pivot tube, radius
+> `fillet_mm` in `data/parts.json`); the arm-to-boss corners stay sharp, so
+> read section 3.6 if a peak sits there.
 
 ---
 

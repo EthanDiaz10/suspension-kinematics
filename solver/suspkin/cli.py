@@ -491,22 +491,29 @@ def run_parts(args) -> None:
         return
     from . import fea
     rows = []
+    panels: dict[str, list] = {}
+    views: dict[str, list] = {}
     for axle, (parts, loads) in built.items():
         for key, part in parts.items():
             tag = f"{axle}_{key}"
             if args.only and tag not in args.only:
                 continue
             mat = cfg.material(part.material)
+            fillet = float(cfg[key].get("fillet_mm", 0.0))
             if args.step:
                 step = out / f"{stems[axle]}_{key}.step"
-                vol = fea.write_step(part, step)
+                vol = fea.write_step(part, step, fillet)
                 print(f"\n{part.name}: {vol / 1000:.1f} cm^3, {vol * mat['density_kg_m3'] * 1e-6:.0f} g "
                       f"({part.material}) -> {step.name}")
             if not args.fea:
                 continue
             cases = {lc.label: lc.forces for lc in loads[key]}
-            print(f"\n{part.name}: FEA, {args.mesh:g} mm elements, fixed at '{part.support}'")
-            res = fea.solve_part(part, cases, mat, args.mesh)
+            print(f"\n{part.name}: FEA, {args.mesh:g} mm elements, {fillet:g} mm fillets, "
+                  f"fixed at '{part.support}'")
+            res = fea.solve_part(part, cases, mat, args.mesh, fillet_mm=fillet, keep_field=True)
+            for n in part.notes:
+                if n.startswith("FEA fillet:"):
+                    print(f"  ({n[12:].strip()})")
             for r in res:
                 sf = mat["yield_mpa"] / r.max_vm_away_mpa if r.max_vm_away_mpa > 0 else float("inf")
                 print(f"  {r.case:30s} peak {r.max_vm_away_mpa:6.0f} MPa (SF {sf:4.1f}) "
@@ -515,11 +522,13 @@ def run_parts(args) -> None:
                              f"{r.max_vm_mpa:.1f}", f"{sf:.2f}", f"{r.max_disp_mm:.4f}",
                              *[f"{x:.1f}" for x in r.where_away]])
             worst = max(res, key=lambda r: r.max_vm_away_mpa)
+            panels.setdefault(axle, []).append((part.name, worst, mat["yield_mpa"]))
+            views.setdefault(axle, []).append({"upright": (18, -60), "rocker": (10, -15)}.get(key, (15, -35)))
             print(f"  worst: {worst.case}, {worst.n_elements} elements; peak at "
                   f"({', '.join(f'{x:.0f}' for x in worst.where_away)}) mm")
             if args.converge:
                 sizes = (args.mesh * 1.5, args.mesh, args.mesh * 0.7)
-                conv = fea.convergence(part, worst.case, cases[worst.case], mat, sizes)
+                conv = fea.convergence(part, worst.case, cases[worst.case], mat, sizes, fillet)
                 print("  mesh convergence (same case, finer and finer):")
                 for r in conv:
                     print(f"    {r.mesh_size:4.1f} mm  {r.n_elements:7d} elements  peak {r.max_vm_away_mpa:6.0f} MPa  "
@@ -531,6 +540,8 @@ def run_parts(args) -> None:
                 change = 100 * abs(conv[-1].max_vm_away_mpa - conv[-2].max_vm_away_mpa) / conv[-1].max_vm_away_mpa
                 print(f"    last refinement changed the peak by {change:.1f}% "
                       f"({'converged' if change < 5 else 'refine further'})")
+    for axle, pn in panels.items():
+        fea.plot_stress(pn, out / f"{stems[axle]}_stress.png", cfg.required_sf, views[axle])
     if rows:
         with open(out / "parts_fea.csv", "w", newline="") as fh:
             w = csv.writer(fh)

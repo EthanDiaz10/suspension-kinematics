@@ -1,6 +1,7 @@
 {
   "_note": "Phase 9 part design: sizes for the upright, rocker and pushrod bracket. The parts are built around the hardpoints (see solver/suspkin/parts.py) from simple solids: cylinders for bosses and housings, boxes for the arms joining them. Change a number here and re-run `suspkin parts` to get new STEP files, hand calcs and FEA loads. Bearing and spherical-bearing sizes are typical catalogue sizes: check them against the parts you would actually buy.",
   "required_safety_factor": 2.0,
+  "_fillet_note": "fillet_mm (per part): the STEP files and the quick FEA round the inside corners where arms meet the housing / bosses / pivot tube with this radius. Sharp inside corners have no converged stress (it keeps rising as the mesh gets finer). Do the same in Fusion before your own study.",
   "_safety_factor_note": "Against yield, on the worst load case. Higher than the 1.5 used for the tubes because these are machined parts with holes and corners (stress raisers the hand calcs don't see) and aluminium has no fatigue limit. The FEA is the real check; the hand calcs size the parts first.",
   "materials": {
     "7075-T6": {"yield_mpa": 503.0, "ultimate_mpa": 572.0, "e_gpa": 71.7, "poisson": 0.33, "density_kg_m3": 2810.0,
@@ -10,6 +11,7 @@
   },
   "upright": {
     "material": "7075-T6",
+    "fillet_mm": 4.0,
     "bearing": {"name": "2 x 61908 thin-section ball bearing (40 x 62 x 12) with a 12 mm spacer",
                 "bore_mm": 62.0, "housing_wall_mm": 5.0, "housing_length_mm": 40.0,
                 "gap_to_hub_face_mm": 4.0},
@@ -28,12 +30,13 @@
       "UBJ": {"width_mm": 16.0, "depth_mm": 26.0, "root_width_mm": 30.0, "root_length_mm": 25.0},
       "LBJ": {"width_mm": 16.0, "depth_mm": 36.0, "root_width_mm": 34.0, "root_length_mm": 20.0},
       "RTO": {"width_mm": 14.0, "depth_mm": 16.0, "root_width_mm": 22.0, "root_length_mm": 25.0},
-      "caliper": {"width_mm": 16.0, "depth_mm": 14.0}
+      "caliper": {"width_mm": 22.0, "depth_mm": 14.0}
     },
     "_arms_note": "Each arm is a solid rectangular bar from the bearing housing to the centre of its boss. width = across the arm, roughly fore-aft; depth = roughly along the axle. Keep a ball joint arm's width equal to its boss length (so the clevis has room) and its depth equal to the boss diameter (so the arm wraps the top half of the boss); a narrower arm leaves the thin bearing wall carrying everything. root_width_mm / root_length_mm add a wider block where the arm meets the housing (a simple taper), since that's where the bending is highest."
   },
   "rocker": {
     "material": "7075-T6",
+    "fillet_mm": 3.0,
     "plate_thickness_mm": 6.0,
     "plate_gap_mm": 14.0,
     "_plates_note": "Two identical plates either side of the rod ends (double shear). plate_gap_mm is the inside gap, centred on the rocker's hardpoints.",
