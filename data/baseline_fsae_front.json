@@ -4,23 +4,31 @@
   "units": "mm",
   "coordinate_system": "SAE/ISO vehicle axes: +X forward, +Y left, +Z up. Origin on the ground plane, on the car centerline, at the front axle line.",
   "side": "front-left",
-  "static_camber_deg": 0.0,
+  "static_camber_deg": -1.0,
   "static_toe_deg": 0.0,
+  "packaging": {
+    "_note": "10 inch rim envelope, checked in the wheel's own frame (see solver/suspkin/packaging.py)",
+    "rim_inner_radius_mm": 117.0,
+    "rim_half_width_mm": 89.0,
+    "radial_clearance_mm": 8.0,
+    "hub_face_axial_mm": -20.0,
+    "checked_points": ["UBJ", "LBJ", "RTO", "SHU"]
+  },
   "chassis": {
-    "UAF": [ 110.0, 270.0, 290.0],
+    "UAF": [110.0, 270.0, 290.0],
     "UAA": [-120.0, 270.0, 280.0],
-    "LAF": [ 130.0, 215.0, 115.0],
+    "LAF": [130.0, 215.0, 115.0],
     "LAA": [-130.0, 215.0, 110.0],
-    "RTI": [  65.0, 215.0, 132.0],
-    "SHC": [   0.0, 300.0, 470.0]
+    "RTI": [65.0, 215.0, 132.0],
+    "SHC": [0.0, 300.0, 470.0]
   },
   "upright": {
-    "UBJ": [  -8.0, 555.0, 335.0],
-    "LBJ": [   5.0, 575.0, 125.0],
-    "RTO": [  68.0, 565.0, 150.0],
-    "SHU": [   0.0, 545.0, 145.0],
-    "WC":  [   0.0, 610.0, 228.0],
-    "CP":  [   0.0, 610.0,   0.0]
+    "UBJ": [-8.0, 555.0, 335.0],
+    "LBJ": [5.0, 575.0, 125.0],
+    "RTO": [68.0, 565.0, 150.0],
+    "SHU": [0.0, 545.0, 145.0],
+    "WC": [0.0, 610.0, 228.0],
+    "CP": [0.0, 610.0, 0.0]
   },
   "point_descriptions": {
     "UAF": "Upper A-arm, front chassis pivot",

@@ -1,0 +1,21 @@
+{
+  "_about": "Phase 2 optimiser settings for the front corner. Offsets are in mm, relative to the starting hardpoints. See solver/suspkin/optimize.py for what each goal means.",
+  "sweep": {"travel_mm": 50, "step_mm": 10},
+  "max_iter": 100,
+  "variables": [
+    {"name": "upper inner pivots z", "points": ["UAF", "UAA"], "axis": "z", "bounds": [-25, 25]},
+    {"name": "upper inner pivots y", "points": ["UAF", "UAA"], "axis": "y", "bounds": [-20, 20]},
+    {"name": "lower inner pivots z", "points": ["LAF", "LAA"], "axis": "z", "bounds": [-20, 20]},
+    {"name": "lower inner pivots y", "points": ["LAF", "LAA"], "axis": "y", "bounds": [-20, 20]},
+    {"name": "upper ball joint z", "points": ["UBJ"], "axis": "z", "bounds": [-20, 10]},
+    {"name": "lower ball joint z", "points": ["LBJ"], "axis": "z", "bounds": [-10, 20]},
+    {"name": "tie rod inner y", "points": ["RTI"], "axis": "y", "bounds": [-20, 20]},
+    {"name": "tie rod inner z", "points": ["RTI"], "axis": "z", "bounds": [-20, 20]}
+  ],
+  "goals": {
+    "rc_migration": {"target": 0.0, "scale": 0.05, "weight": 4.0},
+    "rc_height": {"target": 30.0, "scale": 10.0, "weight": 1.0},
+    "camber_gain": {"target": -0.4, "scale": 0.05, "weight": 1.0},
+    "bump_steer": {"target": 0.0, "scale": 0.05, "weight": 2.0}
+  }
+}

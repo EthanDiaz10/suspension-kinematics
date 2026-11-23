@@ -14,6 +14,7 @@ We model the front-LEFT corner, so "outboard" means +Y.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -98,4 +99,17 @@ def save_hardpoints(hp: Hardpoints, path: str | Path) -> None:
         "chassis": {k: [round(float(c), 4) for c in v] for k, v in hp.chassis.items()},
         "upright": {k: [round(float(c), 4) for c in v] for k, v in hp.upright.items()},
     }
-    Path(path).write_text(json.dumps(out, indent=2) + "\n")
+    Path(path).write_text(dumps_compact(out) + "\n")
+
+
+def dumps_compact(data) -> str:
+    """JSON with 2-space indents, but short lists kept on one line.
+
+    So a point reads as ``"UBJ": [-8.0, 555.0, 335.0]`` instead of five lines.
+    """
+    text = json.dumps(data, indent=2)
+    return re.sub(
+        r"\[\s*([^\[\]{}]*?)\s*\]",
+        lambda m: "[" + ", ".join(x.strip() for x in m.group(1).split(",")) + "]",
+        text,
+    )

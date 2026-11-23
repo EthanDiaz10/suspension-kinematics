@@ -18,9 +18,9 @@ INK, INK_MUTED, GRID, SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 PANELS = (
     ("camber_deg", "Camber", "deg  (− = top in)"),
     ("toe_deg", "Toe / bump steer", "deg  (+ = toe-in)"),
-    ("roll_center_height_mm", "Roll centre height", "mm"),
+    ("roll_center_height_mm", "Roll centre height above ground", "mm"),
+    ("roll_center_shift_mm", "Roll centre movement vs chassis", "mm  (+ = up)"),
     ("motion_ratio", "Motion ratio", "spring / wheel"),
-    ("scrub_radius_mm", "Scrub radius", "mm"),
     ("caster_deg", "Caster", "deg"),
 )
 
@@ -56,6 +56,31 @@ def plot_sweep(metrics: dict[str, np.ndarray], path: str | Path | None = None,
             ax.set_ylim(mid - 0.05, mid + 0.05)
     fig.suptitle(title, x=0.01, ha="left", fontsize=13, color=INK, fontweight="bold")
     fig.tight_layout()
+    if path is not None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(path, dpi=150, facecolor=SURFACE)
+    return fig
+
+
+def plot_comparison(runs: dict[str, dict[str, np.ndarray]], path: str | Path | None = None,
+                    title: str = "Before vs after") -> plt.Figure:
+    """Same six panels as ``plot_sweep``, with one line per design.
+
+    ``runs`` maps a label (e.g. "baseline") to that design's metrics.
+    Up to two designs keep the colours distinct and colour-blind safe.
+    """
+    if len(runs) > len(SERIES):
+        raise ValueError(f"plot_comparison supports up to {len(SERIES)} designs")
+    fig, axes = plt.subplots(2, 3, figsize=(13, 7), facecolor=SURFACE)
+    for ax, (col, name, ylabel) in zip(axes.flat, PANELS):
+        for (label, m), color in zip(runs.items(), SERIES):
+            ax.plot(m["travel_mm"], m[col], color=color, linewidth=2, label=label)
+        _style(ax, name, ylabel)
+    handles, labels = axes.flat[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper right", ncol=len(runs), frameon=False,
+               fontsize=10, labelcolor=INK_MUTED)
+    fig.suptitle(title, x=0.01, ha="left", fontsize=13, color=INK, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
     if path is not None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(path, dpi=150, facecolor=SURFACE)

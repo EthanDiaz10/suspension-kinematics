@@ -8,7 +8,8 @@ realistic for a small open-wheel car.
 
 Change a hardpoint in a JSON file, re-run one command, and get camber, toe,
 caster, KPI, scrub, roll centre and motion ratio over the full wheel travel,
-with no manual remodelling.
+with no manual remodelling. Or let the optimiser move the hardpoints for you,
+toward targets you set, while keeping the joints inside a 10" rim.
 
 ![Bump sweep of the baseline front corner](docs/images/bump_sweep.png)
 
@@ -25,20 +26,24 @@ python -m venv .venv
 pip install -e ".[dev]"
 
 suspkin sweep data/baseline_fsae_front.json   # writes CSV, JSON and plots to results/
+suspkin check data/baseline_fsae_front.json   # do the joints fit inside the rim?
+suspkin optimize data/baseline_fsae_front.json data/optimize_front.json   # ~2 minutes
 pytest                                         # run the tests
 ```
 
 Output for the baseline:
 
 ```
-camber_gain_deg_per_10mm        -0.371
-bump_steer_deg_per_10mm         +0.002
-caster_deg                      +3.542
-kpi_deg                         +5.440
-scrub_radius_mm                +23.095
-mech_trail_mm                  +12.738
-roll_center_height_mm          +28.825
-motion_ratio                    +0.793
+static_camber_deg                     -1.000
+camber_gain_deg_per_10mm              -0.371
+bump_steer_deg_per_10mm               +0.001
+caster_deg                            +3.542
+kpi_deg                               +5.440
+scrub_radius_mm                      +23.095
+mech_trail_mm                        +12.738
+roll_center_height_mm                +28.825
+rc_migration_vs_chassis_mm_per_mm     -0.383
+motion_ratio                          +0.793
 ```
 
 Or from Python / a notebook (see `notebooks/01_bump_sweep.ipynb`):
@@ -55,9 +60,9 @@ sk.plot_sweep(metrics, "my_change.png")
 
 | Folder | What lives there |
 |---|---|
-| `solver/suspkin/` | The Python package: hardpoint loading, the solver, metrics, plots, CLI |
-| `data/` | Hardpoint sets as JSON. Copy the baseline to start a new design |
-| `tests/` | `pytest` checks (link lengths preserved, sign conventions, etc.) |
+| `solver/suspkin/` | The Python package: hardpoint loading, the solver, metrics, rim packaging check, optimiser, plots, CLI |
+| `data/` | Hardpoint sets and optimiser settings as JSON. Copy the baseline to start a new design |
+| `tests/` | `pytest` checks (link lengths preserved, sign conventions, rim clashes, optimiser) |
 | `notebooks/` | Jupyter notebooks for exploring designs |
 | `cad/fusion/` | Fusion script that reads solver output (Phase 3) |
 | `docs/images/` | Plots used in this README |
@@ -84,9 +89,17 @@ each can change without breaking the other.
 | `SHC` | spring/damper chassis end | `SHU` | spring/damper upright end |
 | | | `WC` / `CP` | wheel centre / contact patch |
 
-The baseline is a made-up but realistic FSAE-sized front corner, not a real car. The tie
-rod inner point was placed with a quick grid search so bump steer is close to
-zero, which is a preview of what Phase 2 automates.
+The baseline is a made-up but realistic FSAE-sized front corner, not a real car,
+with −1° static camber. `data/optimized_front.json` is the same corner after
+running the optimiser (see below).
+
+### Rim packaging
+
+The ball joints and tie rod end sit inside the wheel rim, so the rim limits
+where they can go. Each hardpoints file has a `"packaging"` block describing a
+10" rim. `suspkin check` reports, for each joint, how far it is from the rim
+barrel (radial margin) and from the hub mounting face. Because the upright and
+wheel move together, this only needs checking at the design position.
 
 ## How the solver works
 
@@ -105,6 +118,51 @@ length is preserved to within 0.000001 mm at every pose.
 (the pushrod and rocker come later), the contact patch moves rigidly with the
 upright (no tyre deflection), and the roll centre is for pure heave of a
 symmetric car.
+
+## Optimisation (Phase 2)
+
+![Before vs after optimisation](docs/images/optimization_comparison.png)
+
+`suspkin optimize` moves chosen hardpoints to hit targets. Everything is set in
+`data/optimize_front.json`:
+
+* **Variables:** which points move, along which axis, and how far (mm). For
+  example `"upper inner pivots z"` moves both upper-arm chassis pivots up or
+  down together by up to 25 mm.
+* **Goals:** each has a `target`, a `scale` (how far off counts as one unit
+  of bad) and a `weight` (how much you care). The score is
+  `sum(weight × ((achieved − target) / scale)²)` and lower is better.
+* **Hard limits:** the variable bounds, and every joint must fit in the rim.
+
+| Goal | Meaning | Target | Baseline | Optimised |
+|---|---|---|---|---|
+| `rc_migration` | roll-centre movement relative to the chassis, per mm of travel | 0 | −0.38 | −0.006 |
+| `rc_height` | static roll-centre height (mm) | 30 | 28.8 | 27.2 |
+| `camber_gain` | camber change per 10 mm of bump (deg) | −0.40 | −0.37 | −0.42 |
+| `bump_steer` | toe change over ±50 mm (deg) | 0 | 0.009 | 0.020 |
+
+**Why roll-centre movement is measured against the chassis.** The centre of
+gravity rides on the chassis. If the roll centre stays put on the chassis, the
+lever arm between them (which sets how much the car rolls) stays the same as
+the car rises and falls. Measured from the ground instead, even a perfectly
+fixed roll centre "drops" 1 mm per mm of bump, which is why the
+"height above ground" plot still slopes after optimising.
+
+**Things to know:**
+
+* The optimiser (`scipy.optimize.minimize`, SLSQP) walks downhill from the
+  starting geometry. It finds a good design nearby, not necessarily the best
+  one possible. Different bounds or a different starting design can give a
+  different answer.
+* "Iteration limit reached" just means it used its full 100-iteration budget.
+  The score had already dropped from 235 to 0.65.
+* Variables that finish **at a bound** are printed with a marker. The
+  optimiser wanted to go further, so think about whether that bound is real
+  (packaging, chassis tubes) or can be widened.
+* It only knows about the goals you give it. In this run the ball joints moved
+  closer together (210 → 172 mm apart), which raises the loads in the arms and
+  joints, and KPI grew from 5.4° to 6.6°. Neither was a goal, so check the
+  full `suspkin sweep` output of the result before trusting it.
 
 ## Working on more than one PC
 
@@ -141,7 +199,8 @@ Tips:
 ## Roadmap
 
 - [x] **Phase 1:** repo scaffold, baseline hardpoints, bump sweep, camber/toe and other metrics, tests
-- [ ] **Phase 2:** optimisation, nudging chosen hardpoints to hit targets (camber gain, bump steer, roll centre height and migration) within packaging limits
+- [x] **Phase 2:** optimisation, nudging chosen hardpoints to hit targets (camber gain, bump steer, roll centre height and migration) within 10" rim packaging limits
+- [ ] Optimiser goals for ball-joint spread, KPI and scrub, so they can't drift unnoticed
 - [ ] Steering sweep and Ackermann percentage
 - [ ] Pushrod and rocker stage (motion ratio through the rocker)
 - [ ] Anti-dive / anti-squat (side-view geometry)

@@ -12,6 +12,7 @@ scrub radius              positive = steering axis meets the ground INBOARD of
                           the contact patch
 mechanical trail          positive = steering axis meets the ground AHEAD of
                           the contact patch
+roll centre shift         RC movement relative to the chassis (+ = up)
 motion ratio              spring compression / wheel travel (dimensionless)
 ========================  =====================================================
 """
@@ -99,12 +100,12 @@ def instant_center_front_view(pose: Pose):
     return _intersect_2d(p_u, d_u, p_l, d_l)
 
 
-def roll_center_height_mm(pose: Pose) -> float:
-    """Roll centre height for symmetric heave (both wheels moving together).
+def roll_center_z_chassis_mm(pose: Pose) -> float:
+    """Roll centre z for symmetric heave (both wheels moving together), in the
+    chassis frame (the solver holds the chassis still and moves the wheel).
 
     Draw a line from the contact patch through the front-view instant centre;
     by symmetry the roll centre is where it crosses the car centreline (y = 0).
-    Height is measured from the contact-patch ground plane.
     """
     cp = pose.points["CP"][1:]
     ic = instant_center_front_view(pose)
@@ -116,8 +117,12 @@ def roll_center_height_mm(pose: Pose) -> float:
     if abs(direction[0]) < 1e-12:
         return float("nan")
     s = (0.0 - cp[0]) / direction[0]  # how far along the line to reach y = 0
-    rc_z = cp[1] + s * direction[1]
-    return float(rc_z - cp[1])  # height above the contact-patch ground plane
+    return float(cp[1] + s * direction[1])
+
+
+def roll_center_height_mm(pose: Pose) -> float:
+    """Roll centre height above the ground (the contact-patch plane)."""
+    return roll_center_z_chassis_mm(pose) - float(pose.points["CP"][2])
 
 
 # --- spring / damper -------------------------------------------------------
@@ -129,7 +134,7 @@ def spring_length_mm(pose: Pose) -> float:
 METRIC_COLUMNS = (
     "travel_mm", "camber_deg", "toe_deg", "caster_deg", "kpi_deg",
     "scrub_radius_mm", "mech_trail_mm", "roll_center_height_mm",
-    "spring_length_mm", "motion_ratio",
+    "roll_center_shift_mm", "spring_length_mm", "motion_ratio",
 )
 
 
@@ -146,6 +151,15 @@ def compute_metrics(poses: list[Pose]) -> dict[str, np.ndarray]:
         "roll_center_height_mm": np.array([roll_center_height_mm(p) for p in poses]),
         "spring_length_mm": np.array([spring_length_mm(p) for p in poses]),
     }
+    # How far the roll centre moves relative to the CHASSIS (0 at ride height).
+    # This is what matters for handling: the CG rides with the chassis, so if
+    # this stays near 0 the roll moment arm (CG height - RC height) stays the
+    # same as the car heaves. "roll_center_height_mm" is measured from the
+    # ground instead, so it falls ~1 mm per mm of bump even when the RC is
+    # perfectly fixed to the chassis.
+    rc_z = np.array([roll_center_z_chassis_mm(p) for p in poses])
+    i0 = int(np.argmin(np.abs(out["travel_mm"])))
+    out["roll_center_shift_mm"] = rc_z - rc_z[i0]
     # Motion ratio = -d(spring length)/d(wheel travel): positive when the
     # spring compresses as the wheel goes into bump. Needs >= 2 poses.
     if len(poses) >= 2:
@@ -153,6 +167,14 @@ def compute_metrics(poses: list[Pose]) -> dict[str, np.ndarray]:
     else:
         out["motion_ratio"] = np.full(len(poses), np.nan)
     return out
+
+
+def rc_migration(metrics: dict[str, np.ndarray]) -> float:
+    """Roll-centre movement relative to the chassis per mm of wheel travel.
+
+    Least-squares slope over the whole sweep. 0 = RC stays put on the chassis.
+    """
+    return float(np.polyfit(metrics["travel_mm"], metrics["roll_center_shift_mm"], 1)[0])
 
 
 def summary(metrics: dict[str, np.ndarray]) -> dict[str, float]:
@@ -170,6 +192,7 @@ def summary(metrics: dict[str, np.ndarray]) -> dict[str, float]:
         "scrub_radius_mm": float(metrics["scrub_radius_mm"][i0]),
         "mech_trail_mm": float(metrics["mech_trail_mm"][i0]),
         "roll_center_height_mm": float(metrics["roll_center_height_mm"][i0]),
+        "rc_migration_vs_chassis_mm_per_mm": rc_migration(metrics),
         "motion_ratio": float(metrics["motion_ratio"][i0]),
         "toe_range_deg": float(np.ptp(metrics["toe_deg"])),
     }
