@@ -94,6 +94,18 @@ EXPORT_STEP = True
 # Small Fusion helpers
 # ===========================================================================
 
+def set_name(obj, name):
+    """Give a Fusion object a name, but never let naming stop the build.
+
+    Some names can't be changed in some document types (for example the root
+    component's), and a missing label isn't worth failing the whole model for.
+    """
+    try:
+        obj.name = name
+    except Exception:
+        pass
+
+
 def fusion_point(p_mm):
     """SAE point in mm -> Fusion Point3D in cm (the API always works in cm)."""
     x, y, z = geo.to_fusion_cm(p_mm, UP_AXIS)
@@ -146,7 +158,7 @@ def new_component(root, name, notes=None):
     """
     try:
         occ = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())
-        occ.component.name = name
+        set_name(occ.component, name)
         return occ.component
     except Exception:
         if notes is not None and not any("one component" in n for n in notes):
@@ -162,7 +174,7 @@ def add_solid_bodies(comp, named_bodies, feature_name):
     have to go inside a Base Feature. It shows in the timeline as one item.
     """
     base = comp.features.baseFeatures.add()
-    base.name = feature_name
+    set_name(base, feature_name)
     base.startEdit()
     for _name, body in named_bodies:
         comp.bRepBodies.add(body, base)
@@ -170,7 +182,7 @@ def add_solid_bodies(comp, named_bodies, feature_name):
     # Bodies come back in the order they were added, so name them now.
     for i, (name, _body) in enumerate(named_bodies):
         if i < base.bodies.count:
-            base.bodies.item(i).name = name
+            set_name(base.bodies.item(i), name)
     return base
 
 
@@ -193,7 +205,7 @@ def make_tube_with_temp_brep(start, end, od_mm, wall_mm):
 def build_master_sketch(root, points):
     """One 3D sketch with every hardpoint, link line and the kingpin axis."""
     sketch = root.sketches.add(root.xYConstructionPlane)
-    sketch.name = "Hardpoints (master)"
+    set_name(sketch, "Hardpoints (master)")
     sketch.isComputeDeferred = True   # faster: solve the sketch once at the end
 
     # A sketch point per hardpoint. Lines below reuse these points, so their
@@ -230,7 +242,7 @@ def build_tube(comp, seg, od_param, wall_param, od_mm, wall_mm, notes):
     # Each part draws its tube path in its own sketch so the Pipe feature and
     # its path live in the same component (simpler for Fusion and for STEP).
     sketch = comp.sketches.add(comp.xYConstructionPlane)
-    sketch.name = seg["name"] + " path"
+    set_name(sketch, seg["name"] + " path")
     line = sketch.sketchCurves.sketchLines.addByTwoPoints(
         fusion_point(seg["start"]), fusion_point(seg["end"])
     )
@@ -245,8 +257,8 @@ def build_tube(comp, seg, od_param, wall_param, od_mm, wall_mm, notes):
         pipe_in.isHollow = True
         pipe_in.sectionThickness = adsk.core.ValueInput.createByString(wall_param)
         pipe = pipes.add(pipe_in)
-        pipe.name = seg["name"]
-        pipe.bodies.item(0).name = seg["name"]
+        set_name(pipe, seg["name"])
+        set_name(pipe.bodies.item(0), seg["name"])
     except Exception:  # older Fusion versions, or an API change
         notes.append("Pipe feature failed for {}, used a plain tube body instead.".format(seg["name"]))
         body = make_tube_with_temp_brep(seg["start"], seg["end"], od_mm, wall_mm)
@@ -291,8 +303,11 @@ def build_tyre(root, model, notes):
 
     comp = new_component(root, "Tyre (reference)", notes)
     base = add_solid_bodies(comp, [("Tyre", tyre)], "Tyre")
-    for i in range(base.bodies.count):
-        base.bodies.item(i).opacity = TYRE_OPACITY
+    try:
+        for i in range(base.bodies.count):
+            base.bodies.item(i).opacity = TYRE_OPACITY
+    except Exception:
+        pass  # see-through is only cosmetic
 
 
 def export_step(ui, design, json_path, model):
@@ -332,7 +347,7 @@ def build(ui, json_path):
         adsk.fusion.DistanceUnits.MillimeterDistanceUnits
     )
     root = design.rootComponent
-    root.name = model["name"]
+    set_name(root, model["name"])
     add_user_parameters(design)
 
     # 1. Master sketch

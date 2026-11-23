@@ -216,6 +216,8 @@ def test_fusion_script_falls_back_when_components_are_refused(monkeypatch):
     ui = adsk.core.Application.get.return_value.userInterface
     root = adsk.fusion.Design.cast.return_value.rootComponent
     root.occurrences.addNewComponent.side_effect = RuntimeError("not allowed")
+    # Fusion also refuses to rename the root component (seen in Fusion 2026)
+    type(root).name = mock.PropertyMock(side_effect=RuntimeError("root component name cannot be changed"))
     root.features.baseFeatures.add.return_value.bodies.count = 1
     monkeypatch.setattr(script, "DEFAULT_JSON", str(OPTIMIZED))
     monkeypatch.setattr(script, "EXPORT_STEP", False)
