@@ -145,7 +145,7 @@ def test_optimised_design_compensates_camber_and_keeps_roll_centre_central():
     v = sk.VehicleParams.from_hardpoints(opt)
     s = sk.roll_summary(sk.roll_metrics(sk.roll_sweep(opt, 3.0, 0.5), v), v)
     base = sk.roll_summary(sk.roll_metrics(sk.roll_sweep(sk.load_hardpoints(BASELINE), 3.0, 0.5), v), v)
-    assert 40 < s["camber_compensation_pct"] < 55
+    assert 38 < s["camber_compensation_pct"] < 55  # 40% after Phase 9 lowered the UBJ 6 mm
     assert abs(s["roll_steer_deg_per_deg"]) < 0.01
     # The optimiser's roll-centre migration goal pays off in roll too.
     assert abs(s["rc_lateral_shift_mm_per_deg"]) < abs(base["rc_lateral_shift_mm_per_deg"]) / 3

@@ -66,7 +66,7 @@ def test_optimised_rear_kinematics(rear_sweep):
     assert abs(s["rc_migration_vs_chassis_mm_per_mm"]) < 0.06
     assert 20 < s["anti_squat_pct"] < 30                   # target 25%
     assert -0.5 < s["camber_gain_deg_per_10mm"] < -0.35
-    assert s["static_camber_deg"] == pytest.approx(-1.65)
+    assert s["static_camber_deg"] == pytest.approx(-1.75)
     assert 0.7 < s["motion_ratio"] < 0.85
 
 
@@ -186,8 +186,8 @@ def test_files_in_the_wrong_order_are_rejected():
 def test_camber_vs_g_starts_at_static_camber(car):
     c = camber_vs_g(car)
     assert c["lateral_g"][0] == 0.0
-    assert c["front_outer_camber_deg"][0] == pytest.approx(-1.6, abs=1e-6)
-    assert c["rear_outer_camber_deg"][0] == pytest.approx(-1.65, abs=1e-6)
+    assert c["front_outer_camber_deg"][0] == pytest.approx(car.front.hp.static_camber_deg, abs=1e-6)
+    assert c["rear_outer_camber_deg"][0] == pytest.approx(car.rear.hp.static_camber_deg, abs=1e-6)
 
 
 def test_car_command_writes_its_plot(tmp_path, capsys):
