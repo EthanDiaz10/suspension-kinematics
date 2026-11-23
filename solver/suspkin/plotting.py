@@ -1,4 +1,4 @@
-"""Standard plots of a bump sweep (matplotlib)."""
+"""Standard plots of the bump, steering and roll sweeps (matplotlib)."""
 
 from __future__ import annotations
 
@@ -172,6 +172,118 @@ def plot_steering(steer: dict[str, np.ndarray], path: str | Path | None = None,
     ax.set_xlabel("Outer wheel angle (deg)", fontsize=9, color=INK_MUTED)
 
     fig.suptitle(title, x=0.01, ha="left", fontsize=13, color=INK, fontweight="bold")
+    fig.tight_layout()
+    if path is not None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(path, dpi=150, facecolor=SURFACE)
+    return fig
+
+
+ROLL_XLABEL = "Body roll (deg, + = leans right, as in a left turn)"
+
+
+def plot_roll(roll: dict[str, np.ndarray], path: str | Path | None = None,
+              title: str = "Roll sweep") -> plt.Figure:
+    """Six panels from ``roll_metrics``, all against body roll angle.
+
+    At positive roll the right wheel is the outside wheel (in bump).
+    """
+    r = roll["roll_deg"]
+    fig, axes = plt.subplots(2, 3, figsize=(14, 8.2), facecolor=SURFACE)
+
+    def two(ax, left_key, right_key, name, ylabel):
+        """One panel with the left (inside at + roll) and right (outside) wheel."""
+        ax.plot(r, roll[left_key], color=SERIES[0], linewidth=2, label="left wheel")
+        ax.plot(r, roll[right_key], color=SERIES[1], linewidth=2, label="right wheel")
+        _style(ax, name, ylabel)
+        ax.set_xlabel(ROLL_XLABEL, fontsize=9, color=INK_MUTED)
+
+    two(axes[0, 0], "camber_left_deg", "camber_right_deg",
+        "Camber relative to the road", "deg  (− = top leans in)")
+    axes[0, 0].legend(frameon=False, fontsize=9, labelcolor=INK_MUTED)
+    two(axes[0, 1], "steer_left_deg", "steer_right_deg", "Roll steer", "deg  (+ = pointing left)")
+    # Roll steer is usually tiny: don't let matplotlib zoom in on noise.
+    lo, hi = axes[0, 1].get_ylim()
+    if hi - lo < 0.1:
+        mid = (hi + lo) / 2
+        axes[0, 1].set_ylim(mid - 0.05, mid + 0.05)
+    two(axes[1, 0], "travel_left_mm", "travel_right_mm", "Wheel travel vs chassis", "mm  (+ = bump)")
+    two(axes[1, 1], "damper_left_mm", "damper_right_mm", "Damper compression", "mm  (+ = shorter)")
+
+    ax = axes[0, 2]
+    ax.plot(r, roll["rc_height_mm"], color=SERIES[0], linewidth=2, label="height above road")
+    ax.plot(r, roll["rc_lateral_mm"], color=SERIES[1], linewidth=2, label="sideways (+ = left)")
+    _style(ax, "Roll centre", "mm")
+    ax.set_xlabel(ROLL_XLABEL, fontsize=9, color=INK_MUTED)
+    ax.legend(frameon=False, fontsize=9, labelcolor=INK_MUTED)
+
+    ax = axes[1, 2]
+    ax.plot(r, roll["spring_roll_moment_nm"], color=SERIES[0], linewidth=2)
+    _style(ax, "Roll moment the springs push back with", "N·m  (springs only, no anti-roll bar)")
+    ax.set_xlabel(ROLL_XLABEL, fontsize=9, color=INK_MUTED)
+
+    fig.suptitle(title, x=0.01, ha="left", fontsize=13, color=INK, fontweight="bold")
+    fig.tight_layout()
+    if path is not None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(path, dpi=150, facecolor=SURFACE)
+    return fig
+
+
+def plot_roll_front_view(rp, path: str | Path | None = None, title: str | None = None,
+                         tyre_width: float = 180.0) -> plt.Figure:
+    """Front view of the whole axle at one roll angle, as seen from the road.
+
+    ``rp`` is a ``RollPose`` (see ``roll.py``). Draws both corners, the tyres,
+    the body centreline, and the roll-centre construction: a line from each
+    contact patch through its instant centre, crossing at the roll centre.
+    """
+    from .roll import mirror_point, roll_center_chassis  # avoid an import loop
+
+    title = title or f"Front view at {rp.roll_deg:+.1f}° roll (looking rearward)"
+    fig, ax = plt.subplots(figsize=(10, 5.2), facecolor=SURFACE)
+    segs = [("UAF", "UBJ"), ("UAA", "UBJ"), ("LAF", "LBJ"), ("LAA", "LBJ"),
+            ("RTI", "RTO"), ("UBJ", "LBJ")]
+    if "SHR" in rp.left.points:
+        segs += [("PRO", "PRI"), ("RKP", "PRI"), ("RKP", "SHR"), ("PRI", "SHR"), ("SHR", "SHC")]
+    sides = (("left", rp.left.points, rp.left, SERIES[0]),
+             ("right", rp.right_points(), rp.right_src, SERIES[1]))
+    for name, pts, src_pose, color in sides:
+        g = {k: rp.to_ground(v) for k, v in pts.items()}
+        for i, (a, b) in enumerate(segs):
+            ax.plot([g[a][1], g[b][1]], [g[a][2], g[b][2]], color=color, linewidth=1.8,
+                    label=f"{name} corner" if i == 0 else None)
+        # Tyre outline: a rectangle in the wheel plane, as in plot_front_view.
+        axis = src_pose.wheel_axis if name == "left" else mirror_point(src_pose.wheel_axis)
+        axis_g = rp.to_ground(axis) - rp.to_ground(np.zeros(3))
+        up = np.array([0.0, 0.0, 1.0]) - axis_g[2] * axis_g
+        up /= np.linalg.norm(up)
+        radius = np.linalg.norm(g["WC"] - g["CP"])
+        corners = np.array([g["WC"] + sr * radius * up + sw * tyre_width / 2 * axis_g
+                            for sr, sw in ((1, -1), (1, 1), (-1, 1), (-1, -1), (1, -1))])
+        ax.plot(corners[:, 1], corners[:, 2], color=INK_MUTED, linewidth=1)
+
+    # Body centreline (the chassis's own vertical axis), to show the lean.
+    top, bottom = rp.to_ground(np.array([0.0, 0.0, 450.0])), rp.to_ground(np.array([0.0, 0.0, 0.0]))
+    ax.plot([bottom[1], top[1]], [bottom[2], top[2]], color=INK_MUTED, linestyle="--",
+            linewidth=1, label="body centreline")
+    ax.axhline(0.0, color=INK, linewidth=1.2)  # the road
+
+    rc = roll_center_chassis(rp)
+    if rc is not None:
+        rc_g = rp.to_ground(np.array([0.0, rc[0], rc[1]]))
+        for pts in (rp.left.points, rp.right_points()):
+            cp = rp.to_ground(pts["CP"])
+            ax.plot([cp[1], rc_g[1]], [cp[2], rc_g[2]], color=INK_MUTED, linestyle=":", linewidth=1)
+        ax.plot(rc_g[1], rc_g[2], marker="o", color=INK, markersize=6, linestyle="none",
+                label=f"roll centre ({rc_g[1]:+.0f}, {rc_g[2]:.0f}) mm")
+
+    _style(ax, title, "Z above road (mm)", zero_line=False)
+    ax.set_xlabel("Y (mm, + = left)", fontsize=9, color=INK_MUTED)
+    ax.set_aspect("equal")
+    # Legend under the plot so it never covers the rocker or the tyres.
+    ax.legend(frameon=False, fontsize=8, labelcolor=INK_MUTED, loc="upper center",
+              bbox_to_anchor=(0.5, -0.16), ncol=4)
     fig.tight_layout()
     if path is not None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)

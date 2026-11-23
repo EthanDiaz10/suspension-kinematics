@@ -2,6 +2,7 @@
 
     suspkin sweep data/baseline_fsae_front.json
     suspkin steer data/baseline_fsae_front.json --rack 25
+    suspkin roll data/optimized_front.json --roll 3
     suspkin check data/baseline_fsae_front.json
     suspkin optimize data/baseline_fsae_front.json data/optimize_front.json
 """
@@ -17,7 +18,9 @@ from .kinematics import DoubleWishbone, bump_sweep, steer_sweep
 from .metrics import compute_metrics, summary
 from .optimize import OptimizeConfig, optimize
 from .packaging import check_packaging
-from .plotting import plot_comparison, plot_front_view, plot_steering, plot_sweep
+from .plotting import (plot_comparison, plot_front_view, plot_roll, plot_roll_front_view,
+                       plot_steering, plot_sweep)
+from .roll import ROLL_COLUMNS, roll_metrics, roll_summary, roll_sweep
 from .rocker import rocker_checks
 from .sideview import VehicleParams
 from .steering import STEER_COLUMNS, steering_metrics, steering_summary
@@ -42,6 +45,15 @@ def main(argv: list[str] | None = None) -> None:
     st.add_argument("--travel", type=float, default=0.0, help="wheel travel to steer at, mm (default 0)")
     st.add_argument("--out", default="results", help="output folder (default results/)")
 
+    ro = sub.add_parser("roll", help="roll sweep: both corners as the body rolls, CSV and plots")
+    ro.add_argument("hardpoints", help="hardpoints JSON file")
+    ro.add_argument("--roll", type=float, default=3.0, help="± body roll in degrees (default 3)")
+    ro.add_argument("--step", type=float, default=0.25, help="step in degrees (default 0.25)")
+    ro.add_argument("--spring-rate", type=float, default=None,
+                    help="spring rate in N/mm for the roll stiffness (default: the file's "
+                         "vehicle.spring_rate_n_per_mm, else 35)")
+    ro.add_argument("--out", default="results", help="output folder (default results/)")
+
     o = sub.add_parser("optimize", help="nudge hardpoints toward the targets in a config file")
     o.add_argument("hardpoints", help="starting hardpoints JSON file")
     o.add_argument("config", help="optimiser config JSON (variables, goals)")
@@ -52,7 +64,7 @@ def main(argv: list[str] | None = None) -> None:
     c.add_argument("hardpoints", help="hardpoints JSON file")
 
     args = parser.parse_args(argv)
-    {"sweep": run_sweep, "steer": run_steer, "optimize": run_optimize,
+    {"sweep": run_sweep, "steer": run_steer, "roll": run_roll, "optimize": run_optimize,
      "check": run_check}[args.command](args)
 
 
@@ -133,6 +145,30 @@ def run_steer(args) -> None:
     for k, v in steering_summary(steer).items():
         print(f"  {k:36s} {v:+9.3f}")
     print("  (Ackermann: 100% = ideal, 0% = parallel steer, below 0 = anti-Ackermann)")
+    print(f"Wrote results to {out.resolve()}")
+
+
+def run_roll(args) -> None:
+    hp = load_hardpoints(args.hardpoints)
+    vehicle = VehicleParams.from_hardpoints(hp)
+    if args.spring_rate is not None:
+        vehicle.spring_rate_n_per_mm = args.spring_rate
+    poses = roll_sweep(hp, args.roll, args.step)
+    roll = roll_metrics(poses, vehicle)
+
+    out = Path(args.out)
+    stem = Path(args.hardpoints).stem
+    write_metrics_table(roll, ROLL_COLUMNS, out / f"{stem}_roll.csv")
+    plot_roll(roll, out / f"{stem}_roll.png", title=f"{hp.name}: roll sweep")
+    plot_roll_front_view(poses[-1], out / f"{stem}_roll_front_view.png")
+
+    print(f"{hp.name}: body roll ±{args.roll:g} deg "
+          "(+ = leans right, as in a left turn; the right wheel is then the outside one)")
+    for k, v in roll_summary(roll, vehicle).items():
+        print(f"  {k:36s} {v:+9.3f}")
+    print("  (camber compensation: 0% = wheel leans with the body, 100% = stays upright to the road)")
+    print("  (roll steer: below 0 = front wheels steer out of the turn = roll understeer)")
+    print("  (roll stiffness is from the springs only: no anti-roll bar, rigid tyres)")
     print(f"Wrote results to {out.resolve()}")
 
 

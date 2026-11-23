@@ -57,12 +57,13 @@ DEFAULT_VEHICLE = {
     "front_brake_bias": 0.65,  # fraction of brake force on the front axle
     "brakes": "outboard",      # "outboard" (in the wheel) or "inboard" (on the chassis)
     "driven": False,           # does this axle put down drive torque?
+    "spring_rate_n_per_mm": 35.0,  # one corner's spring (~200 lb/in), for roll stiffness
 }
 
 
 @dataclass
 class VehicleParams:
-    """Whole-car numbers the side-view and steering metrics need."""
+    """Whole-car numbers the side-view, steering and roll metrics need."""
 
     axle: str = "front"
     wheelbase_mm: float = 1550.0
@@ -70,6 +71,7 @@ class VehicleParams:
     front_brake_bias: float = 0.65
     brakes: str = "outboard"
     driven: bool = False
+    spring_rate_n_per_mm: float = 35.0  # used by the roll sweep (roll.py)
 
     @classmethod
     def from_dict(cls, raw: dict | None) -> "VehicleParams":
@@ -82,6 +84,7 @@ class VehicleParams:
             front_brake_bias=float(cfg["front_brake_bias"]),
             brakes=str(cfg["brakes"]),
             driven=bool(cfg["driven"]),
+            spring_rate_n_per_mm=float(cfg["spring_rate_n_per_mm"]),
         )
         if v.axle not in ("front", "rear"):
             raise ValueError(f"vehicle axle must be 'front' or 'rear', not {v.axle!r}")
