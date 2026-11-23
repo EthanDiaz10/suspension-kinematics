@@ -52,6 +52,9 @@ def main(argv: list[str] | None = None) -> None:
     ro.add_argument("--spring-rate", type=float, default=None,
                     help="spring rate in N/mm for the roll stiffness (default: the file's "
                          "vehicle.spring_rate_n_per_mm, else 35)")
+    ro.add_argument("--arb-rate", type=float, default=None,
+                    help="anti-roll bar rate in N m/deg (default: the file's arb block; "
+                         "0 to try it without the bar)")
     ro.add_argument("--out", default="results", help="output folder (default results/)")
 
     o = sub.add_parser("optimize", help="nudge hardpoints toward the targets in a config file")
@@ -153,6 +156,10 @@ def run_roll(args) -> None:
     vehicle = VehicleParams.from_hardpoints(hp)
     if args.spring_rate is not None:
         vehicle.spring_rate_n_per_mm = args.spring_rate
+    if args.arb_rate is not None:
+        if hp.arb is None:
+            raise SystemExit("--arb-rate needs an 'arb' block in the hardpoints file")
+        hp.arb.rate_nm_per_deg = args.arb_rate
     poses = roll_sweep(hp, args.roll, args.step)
     roll = roll_metrics(poses, vehicle)
 
@@ -160,15 +167,26 @@ def run_roll(args) -> None:
     stem = Path(args.hardpoints).stem
     write_metrics_table(roll, ROLL_COLUMNS, out / f"{stem}_roll.csv")
     plot_roll(roll, out / f"{stem}_roll.png", title=f"{hp.name}: roll sweep")
-    plot_roll_front_view(poses[-1], out / f"{stem}_roll_front_view.png")
+    plot_roll_front_view(poses[-1], out / f"{stem}_roll_front_view.png",
+                         arb_mount=hp.arb.link_mount if hp.arb else "rocker")
 
     print(f"{hp.name}: body roll ±{args.roll:g} deg "
           "(+ = leans right, as in a left turn; the right wheel is then the outside one)")
-    for k, v in roll_summary(roll, vehicle).items():
-        print(f"  {k:36s} {v:+9.3f}")
+    summ = roll_summary(roll, vehicle)
+    # Print in three groups, so the whole-car numbers stand out.
+    car_keys = ("roll_moment_arm_mm", "roll_gradient_deg_per_g", "roll_at_design_g_deg",
+                "front_roll_stiffness_share_pct", "front_load_transfer_share_pct",
+                "front_weight_pct", "outer_camber_at_design_g_deg", "static_camber_for_target_deg")
+    for k, v in summ.items():
+        if k not in car_keys:
+            print(f"  {k:36s} {v:+9.3f}")
     print("  (camber compensation: 0% = wheel leans with the body, 100% = stays upright to the road)")
     print("  (roll steer: below 0 = front wheels steer out of the turn = roll understeer)")
-    print("  (roll stiffness is from the springs only: no anti-roll bar, rigid tyres)")
+    print(f"Whole car at {vehicle.design_lateral_g:g} g (rear numbers are placeholders, rigid tyres):")
+    for k in car_keys:
+        print(f"  {k:36s} {summ[k]:+9.3f}")
+    print(f"  (static_camber_for_target: the static camber that puts the outside tyre at "
+          f"{vehicle.target_outside_camber_deg:+g} deg at {vehicle.design_lateral_g:g} g)")
     print(f"Wrote results to {out.resolve()}")
 
 

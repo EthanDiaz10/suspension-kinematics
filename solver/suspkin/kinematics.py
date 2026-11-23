@@ -26,6 +26,7 @@ ever has to take a small step and converges in a few iterations.
 If the hardpoints have a pushrod and rocker, a second, much smaller stage runs
 after the upright solve (see ``rocker.py``): it moves the pushrod's outer end
 with the wishbone, then turns the rocker to keep the pushrod length fixed.
+An anti-roll bar (``arb.py``) is solved the same way, last of all.
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ import numpy as np
 from scipy.optimize import least_squares
 from scipy.spatial.transform import Rotation
 
+from .arb import solve_arb
 from .hardpoints import Hardpoints
 from .rocker import ARM_MOUNTS, arm_angle, rotate_about_axis, rocker_points, solve_rocker
 
@@ -60,6 +62,7 @@ class Pose:
     state: np.ndarray             # the 6 solver unknowns [rx, ry, rz, tx, ty, tz]
     max_residual: float           # worst constraint error, mm (should be ~1e-9)
     rocker_angle: float = float("nan")  # rocker rotation from design, rad (nan = no rocker)
+    arb_angle: float = float("nan")     # anti-roll bar arm angle about +Y, rad (nan = no bar)
 
 
 class DoubleWishbone:
@@ -102,19 +105,29 @@ class DoubleWishbone:
         return np.array(res)
 
     # --- the pushrod / rocker stage ---------------------------------------------
-    def _pushrod_outer(self, state: np.ndarray, points: dict[str, np.ndarray]) -> np.ndarray:
-        """Where the pushrod's outer end (PRO) is, given the solved upright."""
-        rk = self.hp.rocker
-        pro = rk.points["PRO"]
-        if rk.mount == "upright":
-            return self._transform(state, pro)  # rides on the upright
-        # On a wishbone: spin PRO about the arm's pivot axis by the arm's angle.
-        front, rear, _bj = ARM_MOUNTS[rk.mount]
+    def _carried_point(self, state: np.ndarray, points: dict[str, np.ndarray],
+                       mount: str, p: np.ndarray, rocker_angle: float = 0.0) -> np.ndarray:
+        """Where a design point ``p`` bolted to ``mount`` has moved to.
+
+        ``mount`` is "upright", "lower_arm", "upper_arm" or "rocker".
+        """
+        if mount == "upright":
+            return self._transform(state, p)  # rides on the upright
+        if mount == "rocker":                 # spins with the rocker
+            rk = self.hp.rocker
+            return rotate_about_axis(p, rk.points["RKP"], rk.axis, rocker_angle)
+        # On a wishbone: spin p about the arm's pivot axis by the arm's angle.
+        front, rear, _bj = ARM_MOUNTS[mount]
         design = {**self.hp.chassis, **self.hp.upright}
         axis = design[rear] - design[front]
         axis = axis / np.linalg.norm(axis)
-        angle = arm_angle(points, design, rk.mount)
-        return rotate_about_axis(pro, design[front], axis, angle)
+        angle = arm_angle(points, design, mount)
+        return rotate_about_axis(p, design[front], axis, angle)
+
+    def _pushrod_outer(self, state: np.ndarray, points: dict[str, np.ndarray]) -> np.ndarray:
+        """Where the pushrod's outer end (PRO) is, given the solved upright."""
+        rk = self.hp.rocker
+        return self._carried_point(state, points, rk.mount, rk.points["PRO"])
 
     def solve_rocker_stage(self, state: np.ndarray, points: dict[str, np.ndarray],
                            guess: float = 0.0) -> tuple[float, dict[str, np.ndarray]]:
@@ -123,8 +136,15 @@ class DoubleWishbone:
         angle = solve_rocker(self.hp.rocker, pro, guess)
         return angle, {"PRO": pro, **rocker_points(self.hp.rocker, angle)}
 
+    def solve_arb_stage(self, state: np.ndarray, points: dict[str, np.ndarray],
+                        rocker_angle: float, guess: float = 0.0) -> tuple[float, dict[str, np.ndarray]]:
+        """Anti-roll bar arm angle (rad) and the ARL, ARA, ARP points for one pose."""
+        arb = self.hp.arb
+        arl = self._carried_point(state, points, arb.link_mount, arb.points["ARL"], rocker_angle)
+        return solve_arb(arb, arl, guess)
+
     def solve(self, travel: float, rack: float = 0.0, guess: np.ndarray | None = None,
-              rocker_guess: float = 0.0) -> Pose:
+              rocker_guess: float = 0.0, arb_guess: float = 0.0) -> Pose:
         """Find the upright pose for one wheel travel and rack position."""
         x0 = np.zeros(6) if guess is None else np.asarray(guess, dtype=float)
         sol = least_squares(
@@ -145,6 +165,10 @@ class DoubleWishbone:
         if self.hp.rocker is not None:
             rocker_angle, extra = self.solve_rocker_stage(state, points, rocker_guess)
             points.update(extra)
+        arb_angle = float("nan")
+        if self.hp.arb is not None:
+            arb_angle, extra = self.solve_arb_stage(state, points, rocker_angle, arb_guess)
+            points.update(extra)
         return Pose(
             travel=float(travel),
             rack=float(rack),
@@ -153,6 +177,7 @@ class DoubleWishbone:
             state=state,
             max_residual=max_res,
             rocker_angle=rocker_angle,
+            arb_angle=arb_angle,
         )
 
     def _march(self, values, solve_one) -> list[Pose]:
@@ -178,7 +203,8 @@ class DoubleWishbone:
         if prev is None:
             return {}
         rk = 0.0 if np.isnan(prev.rocker_angle) else prev.rocker_angle
-        return {"guess": prev.state, "rocker_guess": rk}
+        bar = 0.0 if np.isnan(prev.arb_angle) else prev.arb_angle
+        return {"guess": prev.state, "rocker_guess": rk, "arb_guess": bar}
 
     def sweep(self, travels, rack: float = 0.0) -> list[Pose]:
         """Solve a list of wheel travels, returned sorted from droop to bump."""

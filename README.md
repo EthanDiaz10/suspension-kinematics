@@ -10,7 +10,7 @@ Change a hardpoint in a JSON file, re-run one command, and get camber, toe,
 caster, KPI, scrub, trail, roll centre, motion ratio through a pushrod and
 rocker, and anti-dive over the full wheel travel, plus steering angles and
 Ackermann over the full rack travel, and roll camber, roll steer, the roll
-centre and roll stiffness as the body rolls, with no manual remodelling. Or let the optimiser move the hardpoints for you,
+centre, roll stiffness (springs and anti-roll bar) and roll per g as the body rolls, with no manual remodelling. Or let the optimiser move the hardpoints for you,
 toward targets you set, while keeping the joints inside a 10" rim.
 
 ![Bump sweep of the baseline front corner](docs/images/bump_sweep.png)
@@ -29,7 +29,7 @@ pip install -e ".[dev]"
 
 suspkin sweep data/baseline_fsae_front.json   # writes CSV, JSON and plots to results/
 suspkin steer data/baseline_fsae_front.json   # steering sweep and Ackermann
-suspkin roll data/baseline_fsae_front.json    # body roll: both corners at once
+suspkin roll data/optimized_front.json        # body roll, anti-roll bar, roll per g
 suspkin check data/baseline_fsae_front.json   # do the joints fit inside the rim?
 suspkin optimize data/baseline_fsae_front.json data/optimize_front.json   # ~2 minutes
 pytest                                         # run the tests
@@ -335,12 +335,14 @@ outside wheel. What it reports:
 | Roll steer | steer change per degree of roll; below 0 at the front = steers out of the turn = roll understeer |
 | Roll centre | where the lines from each contact patch through its instant centre cross. With the car rolled it moves sideways as well as up and down |
 | Wheel / damper travel per degree | from the solved poses; their ratio is the motion ratio |
-| Roll stiffness | springs only (no anti-roll bar, rigid tyres), from the spring energy `½k(x_L² + x_R²)`, so a rising-rate rocker is included. A test checks it against the textbook `k·MR²·track²/2` |
+| Roll stiffness | springs plus the anti-roll bar if there is one (rigid tyres), from the stored energy: `½k(x_L² + x_R²)` for the springs, so a rising-rate rocker is included. A test checks it against the textbook `k·MR²·track²/2` |
 | Body heave | how much the body rises or sinks as it rolls (jacking) |
 
 The spring rate comes from `"spring_rate_n_per_mm"` in the `"vehicle"` block
 (35 N/mm, about 200 lb/in, is a made-up placeholder), or `--spring-rate` on
 the command line.
+
+These are the Phase 5 numbers, before the anti-roll bar and camber change below:
 
 | ±3° roll | Baseline | Optimised |
 |---|---|---|
@@ -355,9 +357,81 @@ the command line.
 
 The optimiser's roll-centre migration goal (Phase 2) pays off here: the
 optimised roll centre barely moves sideways, so the roll moment arm stays the
-same through a corner. Even so, the outside tyre goes from −1° static camber
-to about +0.4° at 3° of roll, which costs grip. More static camber, or a
-shorter upper arm for more camber gain, would help.
+same through a corner. Even so, the outside tyre went from −1° static camber
+to about +0.4° at 3° of roll, which costs grip. Phase 6 fixes that.
+
+## Anti-roll bar and roll per g (Phase 6)
+
+<p align="center"><img src="docs/images/roll_front_view.png" width="640" alt="Front view at 3 degrees of roll with the anti-roll bar"></p>
+
+### The bar
+
+An anti-roll bar is a torsion bar running across the car. A drop link joins
+each end of it to the suspension, here a tab on each rocker. In heave both
+ends turn together and the bar does nothing; in roll they turn opposite ways,
+the bar twists, and it pushes back. So it adds roll stiffness without making
+the ride any harsher. It's an optional `"arb"` block in the hardpoints file
+(`solver/suspkin/arb.py`):
+
+| Point | What it is |
+|---|---|
+| `ARL` | drop link lower end, on the rocker (`"link_mount"` can also be `"lower_arm"`, `"upper_arm"` or `"upright"`) |
+| `ARA` | drop link upper end = the end of the bar's arm |
+| `ARP` | where the arm joins the bar; the bar runs along the Y axis through it |
+
+plus `"rate_nm_per_deg"`, the bar's torsional rate. The arm angle is solved
+with the same closed-form circle-meets-sphere maths as the rocker. Mirroring
+the left corner gives the right arm's angle with no sign change, so the twist
+is the left arm's angle in droop minus its angle in bump; a test checks that
+against a real mirrored right corner. Bar roll stiffness = rate × (twist per
+degree of roll)². On this layout the bar twists 5.5° per degree of body roll.
+
+### How far the car rolls, and the front/rear balance
+
+The roll sweep now also uses a few whole-car numbers from the `"vehicle"`
+block: mass, weight split, CG height, and the rear's roll stiffness, roll
+centre and track. The rear ones are placeholders until the rear corner is
+designed. From those (Milliken, ch. 18):
+
+* **Roll per g** = weight × (CG height − roll axis height) / (front + rear roll stiffness).
+* **Front share of lateral load transfer** (often called TLLTD): how much of
+  the weight moving to the outside tyres goes through the front axle. It's a
+  main balance knob: more on the front means more understeer. A common start
+  is a few percent above the front weight share.
+* **Outside-tyre camber at the design load** (`"design_lateral_g"`, 1.5 g),
+  and the **static camber** that would put it at `"target_outside_camber_deg"`.
+  Static camber shifts the whole camber-in-roll curve up or down, so this is
+  a direct read-off (a test checks it).
+
+### Applied to the optimised design
+
+| | Phase 5 | Phase 6 |
+|---|---|---|
+| Front anti-roll bar | none | 6.5 N·m/° |
+| Front roll stiffness (springs + bar) | 273 N·m/° | 273 + 193 = 466 N·m/° |
+| Roll per g | 1.03°/g | 0.81°/g |
+| Front share of load transfer | 39% (oversteer-ish, below the 47% front weight) | 51% |
+| Static camber | −1.0° | −1.6° |
+| Outside-tyre camber at 1.5 g | −0.2° | −1.0° |
+| Upper ball joint (`UBJ`) | | 2 mm lower |
+
+The bar rate was picked for about 51% front load transfer, a mildly
+understeering starting point. With the car then rolling 1.2° at 1.5 g, −1.6°
+static camber leaves the outside tyre at the −1° target. The extra camber
+tilts the rim toward the upper ball joint, so `UBJ` came down 2 mm to stay
+inside it (1.4 mm clearance); that changes camber gain, KPI and anti-dive by
+less than 0.1 and drops the roll centre from 27.5 to 25.0 mm.
+
+The bar's moment curve flattens a little at bigger roll angles (the arm and
+drop link geometry is slightly regressive). Making the drop link meet the arm
+closer to 90° at full roll would straighten it.
+
+Try other bar rates without editing the file:
+
+```bash
+suspkin roll data/optimized_front.json --arb-rate 0     # no bar
+suspkin roll data/optimized_front.json --arb-rate 10    # stiffer bar
+```
 
 ## Working on more than one PC
 
@@ -400,8 +474,9 @@ Tips:
 - [x] **Phase 4:** pushrod and rocker stage (motion ratio, rocker layout checks), side-view instant centre with anti-dive / anti-squat, steering sweep with Ackermann, rocker and damper in the Fusion script
 - [ ] Optimiser goals for Ackermann (needs a steering sweep inside the loop)
 - [x] **Phase 5:** roll sweep: both corners at once, roll camber and steer, roll centre under roll, roll stiffness from the springs
+- [x] **Phase 6:** front anti-roll bar, roll per g, front/rear load transfer split, static camber chosen for the design cornering load
+- [ ] Draw the anti-roll bar in the Fusion script
 - [ ] Rear corner hardpoints (anti-squat, driven axle)
-- [ ] Anti-roll bar, and roll gradient (deg/g) and roll stiffness distribution once the rear corner exists
 
 ## License
 

@@ -75,6 +75,7 @@ from scipy.spatial.transform import Rotation
 
 from .hardpoints import Hardpoints
 from .kinematics import DoubleWishbone, Pose
+from .arb import bar_twist_deg
 from .metrics import _arm_line_front_view, camber_deg, instant_center_front_view, spring_length_mm
 from .sideview import VehicleParams
 from .steering import heading_deg, mirror_axis
@@ -106,6 +107,7 @@ class RollPose:
     travel: float       # right-wheel bump = left-wheel droop, mm (chassis frame)
     left: Pose
     right_src: Pose
+    arb_rate_nm_per_deg: float = 0.0  # anti-roll bar torsional rate (0 = no bar)
 
     @property
     def roll_rad(self) -> float:
@@ -163,8 +165,9 @@ class RollModel:
     def solve(self, roll_deg: float) -> RollPose:
         """Both corners at one body roll angle (deg)."""
         target = np.radians(roll_deg)
+        rate = self.hp.arb.rate_nm_per_deg if self.hp.arb is not None else 0.0
         if abs(target) < 1e-12:
-            return RollPose(float(roll_deg), 0.0, *self.pair(0.0))
+            return RollPose(float(roll_deg), 0.0, *self.pair(0.0), arb_rate_nm_per_deg=rate)
 
         def error(s: float) -> float:  # how far off the target roll we are
             return ground_roll_rad(*self.pair(s)) - target
@@ -181,7 +184,7 @@ class RollModel:
         else:
             raise RuntimeError(f"Couldn't find the wheel travel for {roll_deg:+g} deg of roll.")
         s = brentq(error, lo, hi, xtol=1e-10, rtol=1e-14)
-        return RollPose(float(roll_deg), float(s), *self.pair(s))
+        return RollPose(float(roll_deg), float(s), *self.pair(s), arb_rate_nm_per_deg=rate)
 
     def sweep(self, angles) -> list[RollPose]:
         """Solve a list of roll angles (deg), sorted from most negative to most positive.
@@ -250,7 +253,8 @@ ROLL_COLUMNS = (
     "roll_deg", "travel_left_mm", "travel_right_mm",
     "camber_left_deg", "camber_right_deg", "steer_left_deg", "steer_right_deg",
     "rc_height_mm", "rc_lateral_mm", "damper_left_mm", "damper_right_mm",
-    "chassis_heave_mm", "track_mm", "spring_roll_moment_nm",
+    "chassis_heave_mm", "track_mm", "bar_twist_deg",
+    "spring_roll_moment_nm", "bar_roll_moment_nm", "total_roll_moment_nm",
 )
 
 
@@ -268,7 +272,9 @@ def roll_metrics(poses: list[RollPose], vehicle: VehicleParams | None = None) ->
     * ``damper_*_mm``: damper compression from ride height (+ = shorter).
     * ``chassis_heave_mm``: how far the body rises (+) or sinks as it rolls
       (jacking).
-    * ``spring_roll_moment_nm``: roll moment the springs push back with.
+    * ``bar_twist_deg``: anti-roll bar twist (0 without a bar).
+    * ``*_roll_moment_nm``: roll moment the springs, the bar, and both
+      together push back with.
     """
     vehicle = vehicle or VehicleParams()
     roll = np.array([p.roll_deg for p in poses])
@@ -306,19 +312,31 @@ def roll_metrics(poses: list[RollPose], vehicle: VehicleParams | None = None) ->
         cp_l = rp.to_ground(rp.left.points["CP"])
         cp_r = rp.to_ground(mirror_point(rp.right_src.points["CP"]))
         out["track_mm"].append(cp_l[1] - cp_r[1])
-        out["spring_roll_moment_nm"].append(0.0)  # filled in below
+        if np.isnan(rp.left.arb_angle):
+            out["bar_twist_deg"].append(0.0)  # no bar
+        else:
+            out["bar_twist_deg"].append(bar_twist_deg(rp.left.arb_angle, rp.right_src.arb_angle))
+        for key in ("spring_roll_moment_nm", "bar_roll_moment_nm", "total_roll_moment_nm"):
+            out[key].append(0.0)  # filled in below
 
     res = {k: np.array(v, dtype=float) for k, v in out.items()}
     res["chassis_heave_mm"] -= res["chassis_heave_mm"][i0]  # 0 at no roll
 
-    # Spring energy (N mm) and its slope = roll moment. d/d(roll in rad) gives
-    # N mm per rad = N mm; divide by 1000 for N m.
+    # Roll moment = slope of the stored energy against roll angle (in rad).
+    # Springs: U = k (x_L^2 + x_R^2) / 2, in N mm, so divide by 1000 for N m (J).
+    # Bar: torque = rate x twist, so U = rate x twist^2 / 2, with twist turned
+    # into radians once so U comes out in J.
     k = vehicle.spring_rate_n_per_mm
-    energy = 0.5 * k * (res["damper_left_mm"] ** 2 + res["damper_right_mm"] ** 2)
-    if len(poses) >= 3:
-        res["spring_roll_moment_nm"] = np.gradient(energy, np.radians(roll), edge_order=2) / 1000.0
-    else:
-        res["spring_roll_moment_nm"] = np.full(len(poses), np.nan)
+    rate = poses[i0].arb_rate_nm_per_deg
+    u_springs = 0.5 * k * (res["damper_left_mm"] ** 2 + res["damper_right_mm"] ** 2) / 1000.0
+    u_bar = 0.5 * rate * res["bar_twist_deg"] ** 2 * np.pi / 180.0
+    for key, energy in (("spring_roll_moment_nm", u_springs), ("bar_roll_moment_nm", u_bar),
+                        ("total_roll_moment_nm", u_springs + u_bar)):
+        if len(poses) >= 3:
+            res[key] = np.gradient(energy, np.radians(roll), edge_order=2)
+        else:
+            res[key] = np.full(len(poses), np.nan)
+    res["arb_rate_nm_per_deg"] = np.full(len(poses), rate)  # kept for roll_summary
     return res
 
 
@@ -348,7 +366,12 @@ def roll_summary(roll: dict[str, np.ndarray], vehicle: VehicleParams | None = No
     x_l = slope("damper_left_mm") * per_rad
     x_r = damper_per_deg * per_rad
     k_roll_nmm_per_rad = k * (x_l ** 2 + x_r ** 2)
-    return {
+    k_springs = k_roll_nmm_per_rad / 1000.0 / per_rad          # N mm/rad -> N m/deg
+    # Bar: K = rate x (d twist / d roll)^2, both in degrees, gives N m/deg.
+    twist_per_deg = slope("bar_twist_deg")
+    rate = float(roll["arb_rate_nm_per_deg"][i0]) if "arb_rate_nm_per_deg" in roll else 0.0
+    k_bar = rate * twist_per_deg ** 2
+    out = {
         "roll_camber_outer_deg_per_deg": outer_camber,
         "roll_camber_inner_deg_per_deg": slope("camber_left_deg"),
         "camber_compensation_pct": (1.0 - outer_camber) * 100.0,
@@ -363,6 +386,81 @@ def roll_summary(roll: dict[str, np.ndarray], vehicle: VehicleParams | None = No
         "chassis_heave_at_max_roll_mm": float(roll["chassis_heave_mm"][i_max]),
         "spring_rate_n_per_mm": k,
         "wheel_rate_n_per_mm": k * mr ** 2,
-        # N mm/rad -> N m/deg
-        "roll_stiffness_nm_per_deg": k_roll_nmm_per_rad / 1000.0 / per_rad,
+        "roll_stiffness_springs_nm_per_deg": k_springs,
+        "bar_twist_deg_per_deg_roll": twist_per_deg,
+        "arb_rate_nm_per_deg": rate,
+        "roll_stiffness_bar_nm_per_deg": k_bar,
+        "roll_stiffness_nm_per_deg": k_springs + k_bar,
+    }
+    # Whole car: how far it actually rolls, and what the outside tyre's camber
+    # is at the design cornering load.
+    car = whole_car_roll(out["roll_stiffness_nm_per_deg"], out["rc_height_mm"],
+                         float(roll["track_mm"][i0]), vehicle)
+    out.update(car)
+    phi = car["roll_at_design_g_deg"]
+    if r.min() <= phi <= r.max():
+        camber_now = float(np.interp(phi, r, roll["camber_right_deg"]))
+    else:
+        camber_now = float("nan")  # the sweep doesn't reach that far: use a bigger --roll
+    static_now = float(roll["camber_right_deg"][i0])
+    out["outer_camber_at_design_g_deg"] = camber_now
+    # Static camber just rotates the wheel on the upright, so it shifts the
+    # whole camber curve up or down by the same amount (a test checks this).
+    out["static_camber_for_target_deg"] = static_now + vehicle.target_outside_camber_deg - camber_now
+    return out
+
+
+G = 9.81  # m/s^2
+
+
+def whole_car_roll(front_k_nm_per_deg: float, front_rc_mm: float, front_track_mm: float,
+                   vehicle: VehicleParams) -> dict[str, float]:
+    """Roll per g and the front/rear split of lateral load transfer.
+
+    Steady cornering at lateral acceleration ``A`` (in g). Following Milliken
+    (*Race Car Vehicle Dynamics*, ch. 18), with the whole car's weight
+    ``W = m g`` acting at the CG:
+
+    * The **roll axis** joins the front and rear roll centres. Under the CG it
+      is at ``h_ra = rc_f + (rc_r - rc_f) * a / L`` (``a`` = front axle to CG).
+    * The body rolls about it with moment ``W * A * (h - h_ra)``, resisted by
+      both axles' roll stiffness, so::
+
+          roll per g = W (h - h_ra) / (K_front + K_rear)
+
+    * Each axle's **lateral load transfer** (the weight moving from the inside
+      to the outside tyre) has two parts: its share of the roll moment, which
+      goes through the springs and bars in proportion to roll stiffness, and
+      the part that goes straight through the links at its roll centre::
+
+          dW_front = (W A / t_f) * ( (h - h_ra) K_f / (K_f + K_r) + w_f rc_f )
+
+    The **front share** of the total load transfer (often called TLLTD) is
+    a main handling balance knob: more on the front = more understeer. A common
+    starting point is a few percent above the front weight share.
+
+    Simplifications: everything is treated as sprung mass and the tyres are
+    rigid. The rear numbers are placeholders until the rear corner exists.
+    """
+    v = vehicle
+    per_rad = 180.0 / np.pi
+    k_f = front_k_nm_per_deg * per_rad                       # N m / rad
+    k_r = v.rear_roll_stiffness_nm_per_deg * per_rad
+    L, h = v.wheelbase_mm / 1000.0, v.cg_height_mm / 1000.0  # m
+    a = (1.0 - v.front_weight_fraction) * L                  # front axle to CG
+    rc_f, rc_r = front_rc_mm / 1000.0, v.rear_rc_height_mm / 1000.0
+    h_ra = rc_f + (rc_r - rc_f) * a / L
+    arm = h - h_ra                                           # roll moment arm, m
+    W = v.mass_kg * G
+    gradient_deg = W * arm / (k_f + k_r) * per_rad           # deg per g
+    dw_f = W / (front_track_mm / 1000.0) * (arm * k_f / (k_f + k_r) + v.front_weight_fraction * rc_f)
+    dw_r = W / (v.rear_track_mm / 1000.0) * (arm * k_r / (k_f + k_r)
+                                              + (1.0 - v.front_weight_fraction) * rc_r)
+    return {
+        "roll_moment_arm_mm": arm * 1000.0,
+        "roll_gradient_deg_per_g": gradient_deg,
+        "roll_at_design_g_deg": gradient_deg * v.design_lateral_g,
+        "front_roll_stiffness_share_pct": 100.0 * k_f / (k_f + k_r),
+        "front_load_transfer_share_pct": 100.0 * dw_f / (dw_f + dw_r),
+        "front_weight_pct": 100.0 * v.front_weight_fraction,
     }
