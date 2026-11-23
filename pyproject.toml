@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "suspkin"
+version = "0.1.0"
+description = "Parametric double-wishbone suspension kinematics solver (FSAE-oriented)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["numpy>=1.24", "scipy>=1.10", "matplotlib>=3.7"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "jupyter"]
+
+[project.scripts]
+suspkin = "suspkin.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["solver"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
