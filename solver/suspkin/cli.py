@@ -353,6 +353,19 @@ def run_loads(args) -> None:
               f"{saving:.0f}% lighter")
     print("  (Arms are usually kept above the bare minimum for stiffness, damage tolerance and welding.)")
 
+    # 4. Phase 9: rocker, damper and anti-roll bar drop link.
+    for axle, rls in result.rockers.items():
+        c = result.corners[axle]
+        print(f"\n{axle.capitalize()} rocker loads, N (+ = tension; the bar takes "
+              f"{100 * result.bar_shares[axle]:.0f}% of the roll part, the spring the rest):")
+        print(f"  {'case':30s} {'pushrod':>8s} {'damper':>8s} {'ARB link':>9s} {'pivot':>7s} "
+              f"{'bearings':>13s} {'bar torque':>11s}")
+        st = result.rocker_static[axle]
+        for lab, r in [("static (ride height)", st), *zip(c.labels, rls)]:
+            b1, b2 = r.bearing_radial_n
+            print(f"  {lab:30s} {r.pushrod_n:8.0f} {r.damper_n:8.0f} {r.arb_link_n:9.0f} "
+                  f"{r.pivot_force_n:7.0f} {b1:6.0f} {b2:6.0f} {r.bar_torque_nm:8.1f} Nm")
+
     print("\nNotes:")
     for note in result.notes:
         print(f"  {note}")
@@ -376,9 +389,21 @@ def run_loads(args) -> None:
                         f"{m.max_tension_n:.1f}", m.tension_case, f"{m.max_compression_n:.1f}",
                         m.compression_case, f"{m.sf_tension:.2f}", f"{m.sf_buckling:.2f}",
                         f"{m.sf_rod_end:.2f}"])
+    if result.rockers:
+        with open(out / f"{stem}_rocker_loads.csv", "w", newline="") as fh:
+            w = csv.writer(fh)
+            w.writerow(["axle", "case", "pushrod_n", "damper_n", "arb_link_n", "pivot_n",
+                        "bearing1_n", "bearing2_n", "pivot_axial_n", "bar_torque_nm"])
+            for axle, rls in result.rockers.items():
+                labels = ["static (ride height)", *result.corners[axle].labels]
+                for lab, r in zip(labels, [result.rocker_static[axle], *rls]):
+                    w.writerow([axle, lab, f"{r.pushrod_n:.1f}", f"{r.damper_n:.1f}",
+                                f"{r.arb_link_n:.1f}", f"{r.pivot_force_n:.1f}",
+                                *[f"{x:.1f}" for x in r.bearing_radial_n],
+                                f"{r.pivot_axial_n:.1f}", f"{r.bar_torque_nm:.2f}"])
     (out / f"{stem}_upright_loads.json").write_text(json.dumps(upright_loads_dict(result), indent=2))
     plot_loads(result, out / f"{stem}_loads.png")
-    print(f"\nWrote link forces, margins, upright loads (for a Fusion stress check) and a plot "
+    print(f"\nWrote link forces, margins, rocker loads, upright + rocker loads (for FEA) and a plot "
           f"to {out.resolve()}")
     if any(m.sf < cfg.required_sf for m in result.checks):
         print("WARNING: at least one member is below the required safety factor (see FAIL above)")
