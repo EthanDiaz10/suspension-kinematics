@@ -30,8 +30,16 @@ kpi                 static kingpin inclination (deg). More KPI means more
                     camber change when steering and heavier steering.
 motion_ratio        static damper/wheel motion ratio (needs a rocker block;
                     rocker points PRO, PRI, RKP, SHR and SHC can be variables)
-anti_dive           static anti-dive (front) or anti-lift (rear), percent
+anti_dive           static anti-dive (front) or anti-lift under braking (rear), %
+anti_drive          static anti-squat (driven rear axle) or anti-lift under
+                    acceleration (driven front axle), percent. Needs
+                    ``"driven": true`` in the file's vehicle block.
 ==================  ===========================================================
+
+Side-view goals (anti_dive, anti_drive) need the pivots tilted in side view,
+so give them variables that move ONE pivot of an arm (e.g. only ``LAF`` up or
+down), not both together: moving both by the same amount keeps the arm's
+pivot axis level in side view and barely changes the anti percentages.
 
 SLSQP is a *local* method: it walks downhill from the starting geometry and
 finds the best design nearby, not necessarily the best design possible.
@@ -55,7 +63,7 @@ from .sideview import VehicleParams
 
 AXES = {"x": 0, "y": 1, "z": 2}
 GOALS = ("rc_migration", "rc_height", "camber_gain", "bump_steer", "bj_spread", "kpi",
-         "motion_ratio", "anti_dive")
+         "motion_ratio", "anti_dive", "anti_drive")
 FAILED_SCORE = 1e6  # score for a geometry the solver can't assemble
 
 
@@ -124,11 +132,16 @@ def measure(hp: Hardpoints, travel_mm: float = 50.0, step_mm: float = 10.0) -> d
         "kpi": float(m["kpi_deg"][i0]),
         "motion_ratio": float(m["motion_ratio"][i0]),
         "anti_dive": float(m["anti_brake_pct"][i0]),
+        "anti_drive": float(m["anti_drive_pct"][i0]),  # NaN if the axle isn't driven
     }
 
 
 def score(achieved: dict[str, float], goals: dict[str, Goal]) -> float:
     """Sum of weight * (scaled error)^2 over all goals. Lower is better."""
+    for name in goals:
+        if np.isnan(achieved[name]):
+            raise ValueError(f"goal {name!r} can't be measured for this geometry "
+                             "(anti_drive needs \"driven\": true in the vehicle block)")
     return float(sum(
         g.weight * ((achieved[name] - g.target) / g.scale) ** 2
         for name, g in goals.items()

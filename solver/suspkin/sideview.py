@@ -59,7 +59,8 @@ DEFAULT_VEHICLE = {
     "driven": False,           # does this axle put down drive torque?
     "spring_rate_n_per_mm": 35.0,  # one corner's spring (~200 lb/in), for roll stiffness
     # Whole-car numbers for roll per g and the front/rear load transfer split
-    # (roll.py). The rear ones are placeholders until the rear corner exists.
+    # (roll.py). The rear_* ones are only used by `suspkin roll` on a front
+    # file; `suspkin car` (fullcar.py) uses a real rear file instead.
     "mass_kg": 280.0,                       # car + driver
     "front_weight_fraction": 0.47,          # share of the weight on the front axle
     "rear_track_mm": 1200.0,

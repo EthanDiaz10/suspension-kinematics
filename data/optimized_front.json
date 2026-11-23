@@ -13,7 +13,7 @@
     "checked_points": ["UBJ", "LBJ", "RTO"]
   },
   "vehicle": {
-    "_note": "Whole-car numbers for anti-dive / anti-squat, Ackermann and roll stiffness (see solver/suspkin/sideview.py). spring_rate_n_per_mm is one corner's spring (35 N/mm is about 200 lb/in). mass_kg is car + driver; the rear_* numbers are placeholders until the rear corner is designed. Made-up FSAE-sized values.",
+    "_note": "Whole-car numbers for anti-dive / anti-squat, Ackermann and roll stiffness (see solver/suspkin/sideview.py). spring_rate_n_per_mm is one corner's spring (35 N/mm is about 200 lb/in). mass_kg is car + driver. The rear_* numbers are copied from data/optimized_rear.json (Phase 7, via `suspkin car`) so `suspkin roll` on this file alone matches the whole-car result. Made-up FSAE-sized values.",
     "axle": "front",
     "wheelbase_mm": 1550.0,
     "cg_height_mm": 290.0,
@@ -24,8 +24,8 @@
     "mass_kg": 280.0,
     "front_weight_fraction": 0.47,
     "rear_track_mm": 1200.0,
-    "rear_roll_stiffness_nm_per_deg": 400.0,
-    "rear_rc_height_mm": 45.0,
+    "rear_roll_stiffness_nm_per_deg": 404.3,
+    "rear_rc_height_mm": 32.8,
     "design_lateral_g": 1.5,
     "target_outside_camber_deg": -1.0
   },

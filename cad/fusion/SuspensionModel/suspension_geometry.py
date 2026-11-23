@@ -129,6 +129,44 @@ def _rocker_info(raw_axis, mount, source):
     return axis, (mount or "lower_arm")
 
 
+def _axle_info(raw, source):
+    """Which axle the corner is on, and the wheelbase, from the vehicle block.
+
+    Files without one (Phase 1-6 front files are fine) count as a front corner.
+    """
+    vehicle = raw.get("vehicle") or {}
+    axle = str(vehicle.get("axle", "front"))
+    if axle not in ("front", "rear"):
+        raise ValueError(f"{source}: vehicle 'axle' must be 'front' or 'rear', not {axle!r}")
+    return {"axle": axle, "wheelbase_mm": float(vehicle.get("wheelbase_mm", 0.0))}
+
+
+def car_position_offset(model):
+    """(dx, dy, dz) in mm that moves this corner to its place on the whole car.
+
+    Each hardpoints file has its origin at ITS OWN axle line (so the front and
+    rear files read the same way). On the car the origin is the FRONT axle
+    line, so a rear corner sits one wheelbase further back (-X).
+    """
+    if model["axle"] == "rear":
+        if model["wheelbase_mm"] <= 0:
+            raise ValueError("a rear corner needs vehicle.wheelbase_mm to be placed on the car")
+        return (-model["wheelbase_mm"], 0.0, 0.0)
+    return (0.0, 0.0, 0.0)
+
+
+def place_on_car(model):
+    """A copy of ``model`` with every point moved to its place on the whole car.
+
+    Only points move (directions such as the wheel and rocker axes don't
+    change when you slide something), so all angles and lengths stay the same.
+    """
+    off = car_position_offset(model)
+    placed = dict(model)
+    placed["points"] = {k: add(v, off) for k, v in model["points"].items()}
+    return placed
+
+
 def parse_model(raw, travel_mm=0.0, source="JSON"):
     """Turn the contents of a JSON file into one set of points to draw.
 
@@ -142,7 +180,8 @@ def parse_model(raw, travel_mm=0.0, source="JSON"):
 
     Returns a dict with ``name``, ``points`` (name -> (x, y, z) mm),
     ``wheel_axis`` (unit vector), ``travel_mm``, ``kind``, ``rocker_axis``
-    (unit vector, or None without a rocker) and ``pushrod_mount``.
+    (unit vector, or None without a rocker), ``pushrod_mount``, ``axle``
+    ("front" or "rear", from the vehicle block) and ``wheelbase_mm``.
     """
     if not isinstance(raw, dict):
         raise ValueError(f"{source}: expected a JSON object at the top level")
@@ -161,6 +200,7 @@ def parse_model(raw, travel_mm=0.0, source="JSON"):
         _check_points(points, source)
         axis, mount = _rocker_info(raw.get("rocker_axis"), raw.get("pushrod_mount"), source)
         return {
+            **_axle_info(raw, source),
             "name": raw.get("name") or "suspension",
             "kind": "poses",
             "travel_mm": float(pose.get("travel_mm", 0.0)),
@@ -184,6 +224,7 @@ def parse_model(raw, travel_mm=0.0, source="JSON"):
         if has_rocker(points) and axis is None:
             raise ValueError(f"{source}: the 'rocker' block needs an 'axis' direction")
         return {
+            **_axle_info(raw, source),
             "name": raw.get("name") or "suspension",
             "kind": "hardpoints",
             "travel_mm": 0.0,
@@ -275,9 +316,25 @@ PIVOT_AXES = {
 }
 
 
-def skeleton_links(points):
-    """Every tube to build for this design: the arms, tie rod and pushrod."""
-    return ARM_LINKS + ((PUSHROD_LINK,) if has_rocker(points) else (DIRECT_ACTING_LINK,))
+def skeleton_links(points, axle="front"):
+    """Every tube to build for this design: the arms, tie rod and pushrod.
+
+    On a rear corner (``axle="rear"``) the tie rod is a fixed **toe link**: the
+    same tube between the same points (RTI on the chassis, RTO on the upright),
+    just named for what it is.
+    """
+    links = ARM_LINKS + ((PUSHROD_LINK,) if has_rocker(points) else (DIRECT_ACTING_LINK,))
+    if axle == "rear":
+        links = tuple((TOE_LINK_NAME,) + lk[1:] if lk[3] == "tie_rod" else lk for lk in links)
+    return links
+
+
+TOE_LINK_NAME = "Toe link"
+
+
+def part_name(name, axle="front"):
+    """A part's display name for this axle ("Tie rod" becomes "Toe link" at the rear)."""
+    return TOE_LINK_NAME if (axle == "rear" and name == "Tie rod") else name
 
 
 def end_styles(points, link):
@@ -376,7 +433,7 @@ def rod_end_axis(points, link, at=None, rocker_axis=None, pushrod_mount="lower_a
     return perpendicular_axis(direction, hint)
 
 
-def tube_segments(points, ball_radius_mm, rod_end_radius_mm, overlap_mm=1.0):
+def tube_segments(points, ball_radius_mm, rod_end_radius_mm, overlap_mm=1.0, axle="front"):
     """Trimmed tube centre lines, one per link.
 
     Each tube is shortened so it just reaches into its end fittings
@@ -384,7 +441,7 @@ def tube_segments(points, ball_radius_mm, rod_end_radius_mm, overlap_mm=1.0):
     Returns a list of dicts: ``name``, ``group``, ``start``, ``end`` (mm).
     """
     out = []
-    for link in skeleton_links(points):
+    for link in skeleton_links(points, axle):
         name, a, b, group = link
         radius = {"rod_end": rod_end_radius_mm, "ball": ball_radius_mm}
         style_a, style_b = end_styles(points, link)
@@ -398,12 +455,12 @@ def tube_segments(points, ball_radius_mm, rod_end_radius_mm, overlap_mm=1.0):
     return out
 
 
-def link_lengths(points):
+def link_lengths(points, axle="front"):
     """Centre-to-centre length of every link in mm (handy for a cut list).
 
     With a rocker, the damper's eye-to-eye length is included too.
     """
-    out = {name: distance(points[a], points[b]) for name, a, b, _g in skeleton_links(points)}
+    out = {name: distance(points[a], points[b]) for name, a, b, _g in skeleton_links(points, axle)}
     if has_rocker(points):
         out["Damper (eye to eye)"] = distance(points["SHC"], points["SHR"])
     return out

@@ -1,0 +1,27 @@
+{
+  "_about": "Phase 7 optimiser settings for the rear corner. Offsets are in mm, relative to the starting hardpoints. Same goals as the front, plus anti-squat (anti_drive) and, on a rear corner, 'anti_dive' means anti-lift under braking. The toe link replaces the tie rod, so 'bump_steer' here is the rear toe change over the sweep. See solver/suspkin/optimize.py for what each goal means.",
+  "sweep": {"travel_mm": 50, "step_mm": 10},
+  "max_iter": 100,
+  "variables": [
+    {"name": "upper inner pivots z", "points": ["UAF", "UAA"], "axis": "z", "bounds": [-25, 25]},
+    {"name": "upper inner pivots y", "points": ["UAF", "UAA"], "axis": "y", "bounds": [-20, 20]},
+    {"name": "lower inner pivots z", "points": ["LAF", "LAA"], "axis": "z", "bounds": [-20, 20]},
+    {"name": "lower inner pivots y", "points": ["LAF", "LAA"], "axis": "y", "bounds": [-20, 20]},
+    {"name": "upper front pivot z", "points": ["UAF"], "axis": "z", "bounds": [-20, 20]},
+    {"name": "lower front pivot z", "points": ["LAF"], "axis": "z", "bounds": [-20, 20]},
+    {"name": "upper ball joint z", "points": ["UBJ"], "axis": "z", "bounds": [-20, 10]},
+    {"name": "lower ball joint z", "points": ["LBJ"], "axis": "z", "bounds": [-10, 20]},
+    {"name": "toe link inner y", "points": ["RTI"], "axis": "y", "bounds": [-20, 20]},
+    {"name": "toe link inner z", "points": ["RTI"], "axis": "z", "bounds": [-25, 25]}
+  ],
+  "goals": {
+    "rc_migration": {"target": 0.0, "scale": 0.05, "weight": 4.0},
+    "rc_height": {"target": 40.0, "scale": 10.0, "weight": 1.0},
+    "camber_gain": {"target": -0.4, "scale": 0.05, "weight": 1.0},
+    "bump_steer": {"target": 0.0, "scale": 0.05, "weight": 2.0},
+    "bj_spread": {"target": 205.0, "scale": 10.0, "weight": 2.0},
+    "kpi": {"target": 5.5, "scale": 1.0, "weight": 0.5},
+    "anti_drive": {"target": 25.0, "scale": 5.0, "weight": 2.0},
+    "anti_dive": {"target": 10.0, "scale": 5.0, "weight": 1.0}
+  }
+}

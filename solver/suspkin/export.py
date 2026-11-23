@@ -33,12 +33,16 @@ def write_metrics_table(metrics: dict[str, np.ndarray], columns, path: str | Pat
 
 
 def write_poses_json(poses: list[Pose], path: str | Path, name: str = "",
-                     rocker=None) -> None:
+                     rocker=None, vehicle=None) -> None:
     """Every hardpoint at every pose, in mm, SAE/ISO axes.
 
     ``rocker`` (a ``RockerGeometry``, optional): its fixed pivot direction and
     the pushrod mount are stored once at the top, so the Fusion script can
     draw the rocker pivot and orient the rod ends.
+
+    ``vehicle`` (a ``VehicleParams``, optional): its axle and wheelbase are
+    stored as a small ``"vehicle"`` block, so the Fusion script can name the
+    toe link on a rear corner and place the corner on the car.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -48,6 +52,8 @@ def write_poses_json(poses: list[Pose], path: str | Path, name: str = "",
         "coordinate_system": "SAE/ISO: +X forward, +Y left, +Z up",
         **({"rocker_axis": [round(float(c), 8) for c in rocker.axis],
             "pushrod_mount": rocker.mount} if rocker is not None else {}),
+        **({"vehicle": {"axle": vehicle.axle, "wheelbase_mm": vehicle.wheelbase_mm}}
+           if vehicle is not None else {}),
         "poses": [
             {
                 "travel_mm": p.travel,
