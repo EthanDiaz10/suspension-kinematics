@@ -15,13 +15,14 @@
     "checked_points": ["UBJ", "LBJ", "RTO"]
   },
   "vehicle": {
-    "_note": "Whole-car numbers for anti-dive / anti-squat and Ackermann (see solver/suspkin/sideview.py). Made-up FSAE-sized values.",
+    "_note": "Whole-car numbers for anti-dive / anti-squat, Ackermann and roll stiffness (see solver/suspkin/sideview.py). spring_rate_n_per_mm is one corner's spring (35 N/mm is about 200 lb/in). Made-up FSAE-sized values.",
     "axle": "front",
     "wheelbase_mm": 1550.0,
     "cg_height_mm": 290.0,
     "front_brake_bias": 0.65,
     "brakes": "outboard",
-    "driven": false
+    "driven": false,
+    "spring_rate_n_per_mm": 35.0
   },
   "chassis": {
     "UAF": [110.0, 270.0, 290.0],

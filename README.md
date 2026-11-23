@@ -9,7 +9,8 @@ realistic for a small open-wheel car.
 Change a hardpoint in a JSON file, re-run one command, and get camber, toe,
 caster, KPI, scrub, trail, roll centre, motion ratio through a pushrod and
 rocker, and anti-dive over the full wheel travel, plus steering angles and
-Ackermann over the full rack travel, with no manual remodelling. Or let the optimiser move the hardpoints for you,
+Ackermann over the full rack travel, and roll camber, roll steer, the roll
+centre and roll stiffness as the body rolls, with no manual remodelling. Or let the optimiser move the hardpoints for you,
 toward targets you set, while keeping the joints inside a 10" rim.
 
 ![Bump sweep of the baseline front corner](docs/images/bump_sweep.png)
@@ -28,6 +29,7 @@ pip install -e ".[dev]"
 
 suspkin sweep data/baseline_fsae_front.json   # writes CSV, JSON and plots to results/
 suspkin steer data/baseline_fsae_front.json   # steering sweep and Ackermann
+suspkin roll data/baseline_fsae_front.json    # body roll: both corners at once
 suspkin check data/baseline_fsae_front.json   # do the joints fit inside the rim?
 suspkin optimize data/baseline_fsae_front.json data/optimize_front.json   # ~2 minutes
 pytest                                         # run the tests
@@ -68,7 +70,7 @@ sk.plot_sweep(metrics, "my_change.png")
 
 | Folder | What lives there |
 |---|---|
-| `solver/suspkin/` | The Python package: hardpoint loading, the solver, pushrod/rocker stage, metrics, side-view and steering analysis, rim packaging check, optimiser, plots, CLI |
+| `solver/suspkin/` | The Python package: hardpoint loading, the solver, pushrod/rocker stage, metrics, side-view, steering and roll analysis, rim packaging check, optimiser, plots, CLI |
 | `data/` | Hardpoint sets and optimiser settings as JSON. Copy the baseline to start a new design |
 | `tests/` | `pytest` checks (link lengths preserved, sign conventions, rim clashes, optimiser) |
 | `notebooks/` | Jupyter notebooks for exploring designs |
@@ -304,6 +306,59 @@ found with a quick two-variable search for the smallest toe change over the
 sweep. The `RTO` move uses up most of the room left inside the rim, so it's
 about as far as it can go there.
 
+## Roll sweep (Phase 5)
+
+![Roll sweep of the optimised design](docs/images/roll_sweep.png)
+
+<p align="center"><img src="docs/images/roll_front_view.png" width="640" alt="Front view of the whole axle at 3 degrees of roll"></p>
+
+`suspkin roll` leans the body from −3° to +3° and solves **both** front
+corners at once (`solver/suspkin/roll.py`). As in the steering sweep, only the
+left corner is modelled: the right wheel in bump is the left corner solved at
+the same bump travel and mirrored, and a test checks this against a real
+mirrored right corner.
+
+How a roll angle is set up: the two wheels move equal and opposite amounts
+relative to the chassis (left down, right up), which with equal springs keeps
+the total spring force about the same, so the car rolls without heaving. The
+road is the line through the two contact patches, and a 1D root finder picks
+the wheel travel that tilts that line by exactly the requested angle.
+
+Positive roll means the body leans right, as in a **left** turn (the same
+"left is positive" rule as the steering sweep), so the right wheel is the
+outside wheel. What it reports:
+
+| Output | Meaning |
+|---|---|
+| Roll camber | camber change relative to the **road** per degree of roll. A wheel that simply leaned with the body would be +1°/° on the outside wheel. |
+| Camber compensation | how much of that the camber gain in bump cancels: 0% = leans with the body, 100% = stays upright to the road |
+| Roll steer | steer change per degree of roll; below 0 at the front = steers out of the turn = roll understeer |
+| Roll centre | where the lines from each contact patch through its instant centre cross. With the car rolled it moves sideways as well as up and down |
+| Wheel / damper travel per degree | from the solved poses; their ratio is the motion ratio |
+| Roll stiffness | springs only (no anti-roll bar, rigid tyres), from the spring energy `½k(x_L² + x_R²)`, so a rising-rate rocker is included. A test checks it against the textbook `k·MR²·track²/2` |
+| Body heave | how much the body rises or sinks as it rolls (jacking) |
+
+The spring rate comes from `"spring_rate_n_per_mm"` in the `"vehicle"` block
+(35 N/mm, about 200 lb/in, is a made-up placeholder), or `--spring-rate` on
+the command line.
+
+| ±3° roll | Baseline | Optimised |
+|---|---|---|
+| Roll camber, outside wheel | +0.61°/° | +0.53°/° |
+| Camber compensation | 39% | 47% |
+| Outside-wheel camber at 3° roll | +0.72° | +0.42° |
+| Roll steer | 0.001°/° | 0.000°/° |
+| Roll centre height (static → 3°) | 28.8 → 24.2 mm | 27.5 → 28.1 mm |
+| Roll centre sideways movement | 86 mm/° | 14 mm/° |
+| Wheel / damper travel | 10.6 / 8.2 mm/° | 10.6 / 8.2 mm/° |
+| Roll stiffness (35 N/mm springs) | 268 N·m/° | 273 N·m/° |
+
+The optimiser's roll-centre migration goal (Phase 2) pays off here: the
+optimised roll centre barely moves sideways, so the roll moment arm stays the
+same through a corner. Even so, the outside tyre goes from −1° static camber
+to about +0.4° at 3° of roll, which costs grip. More static camber, or a
+shorter upper arm for more camber gain, would help.
+
 ## Working on more than one PC
 
 Git keeps every PC in sync through GitHub. Set up each PC once:
@@ -344,8 +399,9 @@ Tips:
 - [ ] Optimiser goal for scrub radius and mechanical trail
 - [x] **Phase 4:** pushrod and rocker stage (motion ratio, rocker layout checks), side-view instant centre with anti-dive / anti-squat, steering sweep with Ackermann, rocker and damper in the Fusion script
 - [ ] Optimiser goals for Ackermann (needs a steering sweep inside the loop)
-- [ ] Roll sweep (left and right corners moving opposite ways)
+- [x] **Phase 5:** roll sweep: both corners at once, roll camber and steer, roll centre under roll, roll stiffness from the springs
 - [ ] Rear corner hardpoints (anti-squat, driven axle)
+- [ ] Anti-roll bar, and roll gradient (deg/g) and roll stiffness distribution once the rear corner exists
 
 ## License
 
