@@ -1,0 +1,44 @@
+{
+  "_note": "Phase 8 load cases and member sizes for `suspkin loads` (see solver/suspkin/loads.py). Accelerations are in g at the car's CG; car-level numbers (mass, weight split, CG height, wheelbase) come from the FRONT hardpoints file and the lateral load transfer split from `suspkin car`. Every tyre is assumed to use the same share of its grip, so its forces are proportional to its own vertical load. Made-up FSAE-style numbers: change them to suit.",
+  "required_safety_factor": 1.5,
+  "_safety_factor_note": "Each member must carry at least this many times its worst load case before yielding, buckling or reaching its rod end rating. The g levels below are already peak values (a little above the 1.5 g design load), so 1.5 on top is a common choice for a hobby / FSAE-style design.",
+  "cases": [
+    {"name": "cornering", "lateral_g": 1.6,
+     "_why": "Peak steady cornering, a little above the 1.5 g design load. The inside front tyre lifts at about 1.9 g, so this stays below lift-off."},
+    {"name": "braking", "longitudinal_g": -1.6,
+     "_why": "Peak straight-line braking, all four tyres at the same friction use."},
+    {"name": "braking_cornering", "lateral_g": 1.1, "longitudinal_g": -1.1,
+     "_why": "Trail braking into a corner: about 1.56 g combined, on the friction circle."},
+    {"name": "acceleration", "longitudinal_g": 1.0,
+     "_why": "Traction-limited launch: only the driven (rear) axle pushes."},
+    {"name": "bump", "vertical_g": 3.0,
+     "_why": "Pothole / kerb strike: 3 times the static corner load, straight up."}
+  ],
+  "pneumatic_trail_mm": 20.0,
+  "_pneumatic_trail_note": "A cornering tyre's sideways force acts a little behind the middle of its contact patch (its self-aligning torque). Without it the rear toe link would carry nothing in a corner, because the rear has no caster. 15-30 mm is typical for small racing tyres near peak grip.",
+  "material": {
+    "name": "AISI 4130 chromoly, normalised",
+    "yield_mpa": 435.0,
+    "e_gpa": 205.0,
+    "density_kg_m3": 7850.0,
+    "_note": "Welding softens the tube next to the weld (heat-affected zone) to roughly 360 MPa unless it is heat treated after. Not modelled: the safety factor has to cover it."
+  },
+  "effective_length_factor": 1.0,
+  "_effective_length_note": "K for buckling. 1.0 = pinned at both ends (rod ends / spherical bearings), with the length taken centre to centre of the joints, which is a little conservative.",
+  "members": {
+    "upper_arm": {"od_mm": 19.05, "wall_mm": 1.65, "rod_end": "3/8 in rod end (inner pivots)", "rod_end_rating_n": 20000.0},
+    "lower_arm": {"od_mm": 19.05, "wall_mm": 1.65, "rod_end": "3/8 in rod end (inner pivots)", "rod_end_rating_n": 20000.0},
+    "tie_rod":   {"od_mm": 15.875, "wall_mm": 1.65, "rod_end": "5/16 in rod end", "rod_end_rating_n": 15000.0},
+    "pushrod":   {"od_mm": 15.875, "wall_mm": 1.24, "rod_end": "5/16 in rod end", "rod_end_rating_n": 15000.0}
+  },
+  "_members_note": "Tube sizes match the Fusion script's defaults (cad/fusion/SuspensionModel). On the rear corner 'tie_rod' is the toe link. Rod end and ball joint ratings are PLACEHOLDERS: replace them with the static radial load rating from the catalogue of the parts you would actually buy.",
+  "ball_joint_rating_n": 25000.0,
+  "tube_catalogue": [
+    [12.7, 0.89], [12.7, 1.24], [12.7, 1.65],
+    [15.875, 0.89], [15.875, 1.24], [15.875, 1.65],
+    [19.05, 0.89], [19.05, 1.24], [19.05, 1.65],
+    [22.225, 0.89], [22.225, 1.24], [22.225, 1.65],
+    [25.4, 0.89], [25.4, 1.24], [25.4, 1.65]
+  ],
+  "_tube_catalogue_note": "Common inch chromoly tube sizes, [outside diameter, wall] in mm (1/2 to 1 in OD, 0.035 / 0.049 / 0.065 in wall). `suspkin loads` reports the lightest one that passes for each member group."
+}
