@@ -22,6 +22,10 @@ We need 6 equations to pin down 6 unknowns:
 ``scipy.optimize.least_squares`` drives all six residuals to (numerically) zero.
 For a sweep we start each step from the previous solution, so the solver only
 ever has to take a small step and converges in a few iterations.
+
+If the hardpoints have a pushrod and rocker, a second, much smaller stage runs
+after the upright solve (see ``rocker.py``): it moves the pushrod's outer end
+with the wishbone, then turns the rocker to keep the pushrod length fixed.
 """
 
 from __future__ import annotations
@@ -33,6 +37,7 @@ from scipy.optimize import least_squares
 from scipy.spatial.transform import Rotation
 
 from .hardpoints import Hardpoints
+from .rocker import ARM_MOUNTS, arm_angle, rotate_about_axis, rocker_points, solve_rocker
 
 # (chassis end, upright end) for each rigid link.
 LINKS = (
@@ -54,6 +59,7 @@ class Pose:
     wheel_axis: np.ndarray        # unit spin axis, pointing outboard
     state: np.ndarray             # the 6 solver unknowns [rx, ry, rz, tx, ty, tz]
     max_residual: float           # worst constraint error, mm (should be ~1e-9)
+    rocker_angle: float = float("nan")  # rocker rotation from design, rad (nan = no rocker)
 
 
 class DoubleWishbone:
@@ -95,7 +101,30 @@ class DoubleWishbone:
         res.append(up["WC"][2] - (self.center[2] + travel))
         return np.array(res)
 
-    def solve(self, travel: float, rack: float = 0.0, guess: np.ndarray | None = None) -> Pose:
+    # --- the pushrod / rocker stage ---------------------------------------------
+    def _pushrod_outer(self, state: np.ndarray, points: dict[str, np.ndarray]) -> np.ndarray:
+        """Where the pushrod's outer end (PRO) is, given the solved upright."""
+        rk = self.hp.rocker
+        pro = rk.points["PRO"]
+        if rk.mount == "upright":
+            return self._transform(state, pro)  # rides on the upright
+        # On a wishbone: spin PRO about the arm's pivot axis by the arm's angle.
+        front, rear, _bj = ARM_MOUNTS[rk.mount]
+        design = {**self.hp.chassis, **self.hp.upright}
+        axis = design[rear] - design[front]
+        axis = axis / np.linalg.norm(axis)
+        angle = arm_angle(points, design, rk.mount)
+        return rotate_about_axis(pro, design[front], axis, angle)
+
+    def solve_rocker_stage(self, state: np.ndarray, points: dict[str, np.ndarray],
+                           guess: float = 0.0) -> tuple[float, dict[str, np.ndarray]]:
+        """Rocker angle (rad) and the PRO, PRI, RKP, SHR points for one pose."""
+        pro = self._pushrod_outer(state, points)
+        angle = solve_rocker(self.hp.rocker, pro, guess)
+        return angle, {"PRO": pro, **rocker_points(self.hp.rocker, angle)}
+
+    def solve(self, travel: float, rack: float = 0.0, guess: np.ndarray | None = None,
+              rocker_guess: float = 0.0) -> Pose:
         """Find the upright pose for one wheel travel and rack position."""
         x0 = np.zeros(6) if guess is None else np.asarray(guess, dtype=float)
         sol = least_squares(
@@ -111,32 +140,56 @@ class DoubleWishbone:
             )
         state = sol.x
         R = Rotation.from_rotvec(state[:3])
+        points = {**self.chassis_points(rack), **self.upright_points(state)}
+        rocker_angle = float("nan")
+        if self.hp.rocker is not None:
+            rocker_angle, extra = self.solve_rocker_stage(state, points, rocker_guess)
+            points.update(extra)
         return Pose(
             travel=float(travel),
             rack=float(rack),
-            points={**self.chassis_points(rack), **self.upright_points(state)},
+            points=points,
             wheel_axis=R.apply(self.hp.wheel_axis),
             state=state,
             max_residual=max_res,
+            rocker_angle=rocker_angle,
         )
 
-    def sweep(self, travels, rack: float = 0.0) -> list[Pose]:
-        """Solve a list of wheel travels, returned sorted from droop to bump.
+    def _march(self, values, solve_one) -> list[Pose]:
+        """Solve a sorted list of values, marching outward from the one nearest 0.
 
-        We march outward from the travel closest to zero in both directions,
-        warm-starting each solve from its neighbour. That is much more robust
-        than solving every point from scratch.
+        Each solve is warm-started from its neighbour, which is much more
+        robust than solving every point from scratch. ``solve_one(value, prev)``
+        does one solve (``prev`` is the neighbouring Pose, or None).
         """
-        travels = np.sort(np.asarray(travels, dtype=float))
-        start = int(np.argmin(np.abs(travels)))
-        poses: dict[int, Pose] = {start: self.solve(travels[start], rack)}
+        values = np.sort(np.asarray(values, dtype=float))
+        start = int(np.argmin(np.abs(values)))
+        poses: dict[int, Pose] = {start: solve_one(values[start], None)}
         for direction in (+1, -1):
             i = start + direction
-            while 0 <= i < len(travels):
-                prev = poses[i - direction]
-                poses[i] = self.solve(travels[i], rack, guess=prev.state)
+            while 0 <= i < len(values):
+                poses[i] = solve_one(values[i], poses[i - direction])
                 i += direction
-        return [poses[i] for i in range(len(travels))]
+        return [poses[i] for i in range(len(values))]
+
+    @staticmethod
+    def _warm(prev: Pose | None) -> dict:
+        """Starting guesses for the next solve, taken from its neighbour."""
+        if prev is None:
+            return {}
+        rk = 0.0 if np.isnan(prev.rocker_angle) else prev.rocker_angle
+        return {"guess": prev.state, "rocker_guess": rk}
+
+    def sweep(self, travels, rack: float = 0.0) -> list[Pose]:
+        """Solve a list of wheel travels, returned sorted from droop to bump."""
+        return self._march(travels, lambda t, prev: self.solve(t, rack, **self._warm(prev)))
+
+    def steer_sweep(self, racks, travel: float = 0.0) -> list[Pose]:
+        """Solve a list of rack positions at one wheel travel, sorted low to high.
+
+        Positive rack moves the rack toward +Y (left), which steers the car left.
+        """
+        return self._march(racks, lambda r, prev: self.solve(travel, r, **self._warm(prev)))
 
 
 def bump_sweep(hp: Hardpoints, travel_mm: float = 50.0, step_mm: float = 1.0,
@@ -144,3 +197,10 @@ def bump_sweep(hp: Hardpoints, travel_mm: float = 50.0, step_mm: float = 1.0,
     """Convenience wrapper: sweep from -travel_mm (droop) to +travel_mm (bump)."""
     n = int(round(2 * travel_mm / step_mm)) + 1
     return DoubleWishbone(hp).sweep(np.linspace(-travel_mm, travel_mm, n), rack)
+
+
+def steer_sweep(hp: Hardpoints, rack_mm: float = 25.0, step_mm: float = 1.0,
+                travel: float = 0.0) -> list[Pose]:
+    """Convenience wrapper: sweep the rack from -rack_mm to +rack_mm."""
+    n = int(round(2 * rack_mm / step_mm)) + 1
+    return DoubleWishbone(hp).steer_sweep(np.linspace(-rack_mm, rack_mm, n), travel)

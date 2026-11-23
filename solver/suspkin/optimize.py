@@ -28,6 +28,9 @@ bj_spread           distance between the upper and lower ball joints (mm).
                     Closer joints mean higher loads in the arms and joints.
 kpi                 static kingpin inclination (deg). More KPI means more
                     camber change when steering and heavier steering.
+motion_ratio        static damper/wheel motion ratio (needs a rocker block;
+                    rocker points PRO, PRI, RKP, SHR and SHC can be variables)
+anti_dive           static anti-dive (front) or anti-lift (rear), percent
 ==================  ===========================================================
 
 SLSQP is a *local* method: it walks downhill from the starting geometry and
@@ -48,9 +51,11 @@ from .hardpoints import Hardpoints
 from .kinematics import bump_sweep
 from .metrics import compute_metrics, rc_migration
 from .packaging import packaging_margins
+from .sideview import VehicleParams
 
 AXES = {"x": 0, "y": 1, "z": 2}
-GOALS = ("rc_migration", "rc_height", "camber_gain", "bump_steer", "bj_spread", "kpi")
+GOALS = ("rc_migration", "rc_height", "camber_gain", "bump_steer", "bj_spread", "kpi",
+         "motion_ratio", "anti_dive")
 FAILED_SCORE = 1e6  # score for a geometry the solver can't assemble
 
 
@@ -101,14 +106,13 @@ def apply_offsets(hp: Hardpoints, variables: list[Variable], offsets) -> Hardpoi
     new = hp.copy()
     for var, off in zip(variables, offsets):
         for name in var.points:
-            group = new.chassis if name in new.chassis else new.upright
-            group[name][AXES[var.axis]] += off
+            new.find_point(name)[AXES[var.axis]] += off  # chassis, upright or rocker
     return new
 
 
 def measure(hp: Hardpoints, travel_mm: float = 50.0, step_mm: float = 10.0) -> dict[str, float]:
     """The achieved value of every goal for one geometry."""
-    m = compute_metrics(bump_sweep(hp, travel_mm, step_mm))
+    m = compute_metrics(bump_sweep(hp, travel_mm, step_mm), VehicleParams.from_hardpoints(hp))
     t = m["travel_mm"]
     i0 = int(np.argmin(np.abs(t)))
     return {
@@ -118,6 +122,8 @@ def measure(hp: Hardpoints, travel_mm: float = 50.0, step_mm: float = 10.0) -> d
         "bump_steer": float(np.ptp(m["toe_deg"])),
         "bj_spread": float(np.linalg.norm(hp.upright["UBJ"] - hp.upright["LBJ"])),
         "kpi": float(m["kpi_deg"][i0]),
+        "motion_ratio": float(m["motion_ratio"][i0]),
+        "anti_dive": float(m["anti_brake_pct"][i0]),
     }
 
 

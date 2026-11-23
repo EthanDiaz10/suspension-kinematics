@@ -43,10 +43,10 @@ def test_point_past_hub_face_is_flagged(hp):
 
 
 def test_point_inboard_of_rim_has_no_radial_limit(hp):
-    hp.upright["SHU"][1] = hp.upright["WC"][1] - 150  # beyond the rim's inner edge
-    hp.upright["SHU"][2] += 200                     # far from the axis
-    shu = next(c for c in check_packaging(hp) if c.name == "SHU")
-    assert shu.ok and shu.radial_margin_mm == float("inf")
+    hp.upright["RTO"][1] = hp.upright["WC"][1] - 150  # beyond the rim's inner edge
+    hp.upright["RTO"][2] += 200                     # far from the axis
+    rto = next(c for c in check_packaging(hp) if c.name == "RTO")
+    assert rto.ok and rto.radial_margin_mm == float("inf")
 
 
 # --- optimiser -------------------------------------------------------------
@@ -90,3 +90,19 @@ def test_committed_optimised_geometry_is_better_and_fits(hp):
     assert all(c.ok for c in check_packaging(opt))
     from suspkin.optimize import score
     assert score(after, cfg.goals) < score(before, cfg.goals)
+
+
+# --- Phase 4 goals and rocker variables --------------------------------------
+def test_measure_reports_motion_ratio_and_anti_dive(hp):
+    achieved = measure(hp)
+    assert 0.5 < achieved["motion_ratio"] < 1.0
+    assert np.isfinite(achieved["anti_dive"])
+
+
+def test_rocker_points_can_be_optimiser_variables(hp):
+    """Lengthening the rocker's damper arm raises the motion ratio."""
+    var = Variable("damper arm z", ["SHR", "SHC"], "z", (-10, 10))
+    moved = apply_offsets(hp, [var], [8.0])
+    assert moved.rocker.points["SHR"][2] == hp.rocker.points["SHR"][2] + 8
+    assert hp.rocker.points["SHR"][2] == 474.2  # original left untouched
+    assert measure(moved)["motion_ratio"] > measure(hp)["motion_ratio"]

@@ -25,8 +25,13 @@ import math
 # Hardpoint names (must match solver/suspkin/hardpoints.py)
 # ---------------------------------------------------------------------------
 CHASSIS_POINTS = ("UAF", "UAA", "LAF", "LAA", "RTI", "SHC")
-UPRIGHT_POINTS = ("UBJ", "LBJ", "RTO", "SHU", "WC", "CP")
-ALL_POINTS = CHASSIS_POINTS + UPRIGHT_POINTS
+UPRIGHT_POINTS = ("UBJ", "LBJ", "RTO", "WC", "CP")
+# Pushrod and rocker (Phase 4): pushrod outer/inner, rocker pivot, damper end
+# on the rocker. Designs without a rocker use the old direct-acting point SHU.
+ROCKER_POINTS = ("PRO", "PRI", "RKP", "SHR")
+DIRECT_ACTING_POINT = "SHU"
+# Every point name we know, in drawing order.
+ALL_POINTS = CHASSIS_POINTS + UPRIGHT_POINTS + (DIRECT_ACTING_POINT,) + ROCKER_POINTS
 
 MM_PER_CM = 10.0
 
@@ -104,10 +109,24 @@ def _as_point(name, value, source):
     return (x, y, z)
 
 
+def has_rocker(points):
+    """True if the design has a pushrod and rocker (else: direct-acting damper)."""
+    return all(n in points for n in ROCKER_POINTS)
+
+
 def _check_points(points, source):
-    missing = [n for n in ALL_POINTS if n not in points]
+    missing = [n for n in CHASSIS_POINTS + UPRIGHT_POINTS if n not in points]
+    if not has_rocker(points) and DIRECT_ACTING_POINT not in points:
+        missing += [n for n in ROCKER_POINTS if n not in points]
+        missing.append(DIRECT_ACTING_POINT + " (or a rocker block)")
     if missing:
         raise ValueError(f"{source}: missing hardpoints {missing}")
+
+
+def _rocker_info(raw_axis, mount, source):
+    """Unit rocker axis (or None) and the pushrod mount name."""
+    axis = unit(_as_point("rocker axis", raw_axis, source)) if raw_axis is not None else None
+    return axis, (mount or "lower_arm")
 
 
 def parse_model(raw, travel_mm=0.0, source="JSON"):
@@ -122,7 +141,8 @@ def parse_model(raw, travel_mm=0.0, source="JSON"):
       used, so you can draw the corner at full bump or droop.
 
     Returns a dict with ``name``, ``points`` (name -> (x, y, z) mm),
-    ``wheel_axis`` (unit vector), ``travel_mm`` and ``kind``.
+    ``wheel_axis`` (unit vector), ``travel_mm``, ``kind``, ``rocker_axis``
+    (unit vector, or None without a rocker) and ``pushrod_mount``.
     """
     if not isinstance(raw, dict):
         raise ValueError(f"{source}: expected a JSON object at the top level")
@@ -139,12 +159,15 @@ def parse_model(raw, travel_mm=0.0, source="JSON"):
         pose = min(poses, key=lambda p: abs(float(p.get("travel_mm", 0.0)) - travel_mm))
         points = {k: _as_point(k, v, source) for k, v in pose["points"].items()}
         _check_points(points, source)
+        axis, mount = _rocker_info(raw.get("rocker_axis"), raw.get("pushrod_mount"), source)
         return {
             "name": raw.get("name") or "suspension",
             "kind": "poses",
             "travel_mm": float(pose.get("travel_mm", 0.0)),
             "points": points,
             "wheel_axis": unit(_as_point("wheel_axis", pose["wheel_axis"], source)),
+            "rocker_axis": axis if has_rocker(points) else None,
+            "pushrod_mount": mount,
         }
 
     if "chassis" in raw and "upright" in raw:
@@ -152,7 +175,14 @@ def parse_model(raw, travel_mm=0.0, source="JSON"):
         for group in ("chassis", "upright"):
             for k, v in raw[group].items():
                 points[k] = _as_point(k, v, source)
+        rocker = raw.get("rocker") or {}
+        for k in ROCKER_POINTS:
+            if k in rocker:
+                points[k] = _as_point(k, rocker[k], source)
         _check_points(points, source)
+        axis, mount = _rocker_info(rocker.get("axis"), rocker.get("pushrod_mount"), source)
+        if has_rocker(points) and axis is None:
+            raise ValueError(f"{source}: the 'rocker' block needs an 'axis' direction")
         return {
             "name": raw.get("name") or "suspension",
             "kind": "hardpoints",
@@ -162,6 +192,8 @@ def parse_model(raw, travel_mm=0.0, source="JSON"):
                 float(raw.get("static_camber_deg", 0.0)),
                 float(raw.get("static_toe_deg", 0.0)),
             ),
+            "rocker_axis": axis if has_rocker(points) else None,
+            "pushrod_mount": mount,
         }
 
     raise ValueError(
@@ -220,16 +252,19 @@ def to_fusion_cm(p, up_axis="Z"):
 # What to draw
 # ---------------------------------------------------------------------------
 # Each link: (display name, inboard point, outboard point, group).
-# "inboard" ends get a rod end, "outboard" ends a ball joint (see LINK_ENDS).
-SKELETON_LINKS = (
+# "inboard" ends get a rod end and "outboard" ends a ball joint, except the
+# pushrod on a rocker, which has rod ends at both ends (see end_styles).
+ARM_LINKS = (
     ("Upper arm front leg", "UAF", "UBJ", "upper_arm"),
     ("Upper arm rear leg", "UAA", "UBJ", "upper_arm"),
     ("Lower arm front leg", "LAF", "LBJ", "lower_arm"),
     ("Lower arm rear leg", "LAA", "LBJ", "lower_arm"),
     ("Tie rod", "RTI", "RTO", "tie_rod"),
-    # Direct-acting spring/damper placeholder until the pushrod/rocker phase.
-    ("Pushrod", "SHC", "SHU", "pushrod"),
 )
+# Pushrod from the rocker (inboard) down to its bracket on the arm (outboard).
+PUSHROD_LINK = ("Pushrod", "PRI", "PRO", "pushrod")
+# Old direct-acting spring/damper (files without a rocker block).
+DIRECT_ACTING_LINK = ("Pushrod", "SHC", "SHU", "pushrod")
 
 # For A-arm inner rod ends, the bolt axis runs along the arm's pivot axis
 # (front pivot -> rear pivot). Other rod ends just point their bolt as close
@@ -238,6 +273,22 @@ PIVOT_AXES = {
     "upper_arm": ("UAF", "UAA"),
     "lower_arm": ("LAF", "LAA"),
 }
+
+
+def skeleton_links(points):
+    """Every tube to build for this design: the arms, tie rod and pushrod."""
+    return ARM_LINKS + ((PUSHROD_LINK,) if has_rocker(points) else (DIRECT_ACTING_LINK,))
+
+
+def end_styles(points, link):
+    """("rod_end" | "ball", same) for the (inboard, outboard) end of a link.
+
+    A pushrod on a rocker has rod ends at both ends; everything else has a rod
+    end at the chassis and a ball joint at the upright.
+    """
+    if link[3] == "pushrod" and has_rocker(points):
+        return ("rod_end", "rod_end")
+    return ("rod_end", "ball")
 
 
 def kingpin_line(points, above_ubj_mm=40.0):
@@ -298,12 +349,27 @@ def perpendicular_axis(direction, hint=(0.0, 0.0, 1.0)):
     return unit(h)
 
 
-def rod_end_axis(points, link):
-    """Bolt direction of the rod end at the inboard end of ``link``."""
+def rod_end_axis(points, link, at=None, rocker_axis=None, pushrod_mount="lower_arm"):
+    """Bolt direction of the rod end at one end of ``link``.
+
+    ``at`` is the point name of that end (default: the inboard end). The bolt
+    is always at right angles to the link, and as close as possible to:
+
+    * the arm's pivot axis, for A-arm inner rod ends;
+    * the rocker's axis, for the pushrod's rocker end (PRI) and the damper;
+    * the mounting arm's pivot axis, for the pushrod's outer end (PRO);
+    * vertical, for everything else.
+    """
     _name, a, b, group = link
+    at = at or a
     direction = sub(points[b], points[a])
     if group in PIVOT_AXES:
         front, rear = PIVOT_AXES[group]
+        hint = sub(points[rear], points[front])
+    elif at in ("PRI", "SHR", "SHC") and rocker_axis is not None:
+        hint = rocker_axis
+    elif at == "PRO" and pushrod_mount in PIVOT_AXES:
+        front, rear = PIVOT_AXES[pushrod_mount]
         hint = sub(points[rear], points[front])
     else:
         hint = (0.0, 0.0, 1.0)
@@ -318,21 +384,76 @@ def tube_segments(points, ball_radius_mm, rod_end_radius_mm, overlap_mm=1.0):
     Returns a list of dicts: ``name``, ``group``, ``start``, ``end`` (mm).
     """
     out = []
-    for link in SKELETON_LINKS:
+    for link in skeleton_links(points):
         name, a, b, group = link
+        radius = {"rod_end": rod_end_radius_mm, "ball": ball_radius_mm}
+        style_a, style_b = end_styles(points, link)
         start, end = trim_segment(
             points[a],
             points[b],
-            max(rod_end_radius_mm - overlap_mm, 0.0),
-            max(ball_radius_mm - overlap_mm, 0.0),
+            max(radius[style_a] - overlap_mm, 0.0),
+            max(radius[style_b] - overlap_mm, 0.0),
         )
         out.append({"name": name, "group": group, "start": start, "end": end})
     return out
 
 
 def link_lengths(points):
-    """Centre-to-centre length of every link in mm (handy for a cut list)."""
-    return {name: distance(points[a], points[b]) for name, a, b, _g in SKELETON_LINKS}
+    """Centre-to-centre length of every link in mm (handy for a cut list).
+
+    With a rocker, the damper's eye-to-eye length is included too.
+    """
+    out = {name: distance(points[a], points[b]) for name, a, b, _g in skeleton_links(points)}
+    if has_rocker(points):
+        out["Damper (eye to eye)"] = distance(points["SHC"], points["SHR"])
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Rocker and damper (Phase 4)
+# ---------------------------------------------------------------------------
+def rocker_axis_line(points, rocker_axis, half_length_mm=30.0):
+    """Ends of a short line along the rocker pivot axis, centred on RKP."""
+    half = scale(rocker_axis, half_length_mm)
+    return sub(points["RKP"], half), add(points["RKP"], half)
+
+
+def rocker_bars(points):
+    """The rocker drawn as a triangle of bars: pivot->pushrod, pivot->damper,
+    pushrod->damper. Returns (name, start, end) tuples in mm."""
+    return [
+        ("Rocker arm to pushrod", points["RKP"], points["PRI"]),
+        ("Rocker arm to damper", points["RKP"], points["SHR"]),
+        ("Rocker web", points["PRI"], points["SHR"]),
+    ]
+
+
+def rocker_plane_error_deg(points, rocker_axis):
+    """How far PRI and SHR sit out of the plane through RKP at right angles to
+    the axis, as angles seen from the pivot (deg). Should be ~0 for a flat
+    rocker plate; the solver doesn't need it, it's a sanity check."""
+    out = []
+    for name in ("PRI", "SHR"):
+        v = sub(points[name], points["RKP"])
+        out.append(math.degrees(math.asin(min(1.0, abs(dot(unit(v), rocker_axis))))))
+    return max(out)
+
+
+def damper_segments(points, body_length_mm, eye_radius_mm):
+    """Damper split into a fat body (chassis end) and a thin shaft (rocker end).
+
+    Returns ``(body_start, body_end, shaft_end)``: the body runs from just past
+    the chassis eye for ``body_length_mm`` (capped at 70 % of the length so the
+    shaft always shows), and the shaft from there to just short of the rocker
+    eye.
+    """
+    shc, shr = points["SHC"], points["SHR"]
+    length = distance(shc, shr)
+    d = unit(sub(shr, shc))
+    body_start = add(shc, scale(d, eye_radius_mm))
+    body_end = add(shc, scale(d, eye_radius_mm + min(body_length_mm, 0.7 * length)))
+    shaft_end = sub(shr, scale(d, eye_radius_mm))
+    return body_start, body_end, shaft_end
 
 
 def wheel_cylinder(points, wheel_axis, width_mm):

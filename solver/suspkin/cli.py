@@ -1,6 +1,7 @@
 """Command line tool. Examples:
 
     suspkin sweep data/baseline_fsae_front.json
+    suspkin steer data/baseline_fsae_front.json --rack 25
     suspkin check data/baseline_fsae_front.json
     suspkin optimize data/baseline_fsae_front.json data/optimize_front.json
 """
@@ -10,13 +11,16 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .export import write_metrics_csv, write_poses_json
+from .export import write_metrics_csv, write_metrics_table, write_poses_json
 from .hardpoints import load_hardpoints, save_hardpoints
-from .kinematics import bump_sweep
+from .kinematics import DoubleWishbone, bump_sweep, steer_sweep
 from .metrics import compute_metrics, summary
 from .optimize import OptimizeConfig, optimize
 from .packaging import check_packaging
-from .plotting import plot_comparison, plot_front_view, plot_sweep
+from .plotting import plot_comparison, plot_front_view, plot_steering, plot_sweep
+from .rocker import rocker_checks
+from .sideview import VehicleParams
+from .steering import STEER_COLUMNS, steering_metrics, steering_summary
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -31,6 +35,13 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("--rack", type=float, default=0.0, help="steering rack offset in mm")
     s.add_argument("--out", default="results", help="output folder (default results/)")
 
+    st = sub.add_parser("steer", help="steering sweep: steer angles and Ackermann, CSV and plot")
+    st.add_argument("hardpoints", help="hardpoints JSON file")
+    st.add_argument("--rack", type=float, default=25.0, help="± rack travel in mm (default 25)")
+    st.add_argument("--step", type=float, default=1.0, help="step in mm (default 1)")
+    st.add_argument("--travel", type=float, default=0.0, help="wheel travel to steer at, mm (default 0)")
+    st.add_argument("--out", default="results", help="output folder (default results/)")
+
     o = sub.add_parser("optimize", help="nudge hardpoints toward the targets in a config file")
     o.add_argument("hardpoints", help="starting hardpoints JSON file")
     o.add_argument("config", help="optimiser config JSON (variables, goals)")
@@ -41,7 +52,8 @@ def main(argv: list[str] | None = None) -> None:
     c.add_argument("hardpoints", help="hardpoints JSON file")
 
     args = parser.parse_args(argv)
-    {"sweep": run_sweep, "optimize": run_optimize, "check": run_check}[args.command](args)
+    {"sweep": run_sweep, "steer": run_steer, "optimize": run_optimize,
+     "check": run_check}[args.command](args)
 
 
 def run_check(args) -> None:
@@ -62,9 +74,10 @@ def run_optimize(args) -> None:
     out.mkdir(parents=True, exist_ok=True)
     stem = Path(args.hardpoints).stem
     save_hardpoints(result.hardpoints, out / f"{stem}_optimized.json")
+    vehicle = VehicleParams.from_hardpoints(hp)
     runs = {
-        "before": compute_metrics(bump_sweep(hp, 50, 1)),
-        "after": compute_metrics(bump_sweep(result.hardpoints, 50, 1)),
+        "before": compute_metrics(bump_sweep(hp, 50, 1), vehicle),
+        "after": compute_metrics(bump_sweep(result.hardpoints, 50, 1), vehicle),
     }
     plot_comparison(runs, out / f"{stem}_optimized_comparison.png", title=f"{hp.name}: before vs after")
 
@@ -82,20 +95,44 @@ def run_optimize(args) -> None:
 
 def run_sweep(args) -> None:
     hp = load_hardpoints(args.hardpoints)
+    vehicle = VehicleParams.from_hardpoints(hp)
     poses = bump_sweep(hp, args.travel, args.step, args.rack)
-    metrics = compute_metrics(poses)
+    metrics = compute_metrics(poses, vehicle)
 
     out = Path(args.out)
     stem = Path(args.hardpoints).stem
     write_metrics_csv(metrics, out / f"{stem}_sweep.csv")
-    write_poses_json(poses, out / f"{stem}_poses.json", name=hp.name)
+    write_poses_json(poses, out / f"{stem}_poses.json", name=hp.name, rocker=hp.rocker)
     plot_sweep(metrics, out / f"{stem}_sweep.png", title=hp.name)
     plot_front_view(poses, out / f"{stem}_front_view.png")
 
     print(f"{hp.name}: {len(poses)} poses, worst residual "
           f"{max(p.max_residual for p in poses):.1e} mm")
-    for k, v in summary(metrics).items():
-        print(f"  {k:34s} {v:+9.3f}")
+    for k, v in summary(metrics, vehicle).items():
+        print(f"  {k:36s} {v:+9.3f}")
+    if hp.rocker is not None:
+        print("Rocker layout at ride height:")
+        static = DoubleWishbone(hp).solve(0.0)
+        for k, v in rocker_checks(hp.rocker, static.points).items():
+            print(f"  {k:36s} {v:9.1f}")
+    print(f"Wrote results to {out.resolve()}")
+
+
+def run_steer(args) -> None:
+    hp = load_hardpoints(args.hardpoints)
+    vehicle = VehicleParams.from_hardpoints(hp)
+    poses = steer_sweep(hp, args.rack, args.step, args.travel)
+    steer = steering_metrics(poses, vehicle)
+
+    out = Path(args.out)
+    stem = Path(args.hardpoints).stem
+    write_metrics_table(steer, STEER_COLUMNS, out / f"{stem}_steer.csv")
+    plot_steering(steer, out / f"{stem}_steer.png", title=f"{hp.name}: steering")
+
+    print(f"{hp.name}: steering ±{args.rack:g} mm rack at {args.travel:+g} mm wheel travel")
+    for k, v in steering_summary(steer).items():
+        print(f"  {k:36s} {v:+9.3f}")
+    print("  (Ackermann: 100% = ideal, 0% = parallel steer, below 0 = anti-Ackermann)")
     print(f"Wrote results to {out.resolve()}")
 
 

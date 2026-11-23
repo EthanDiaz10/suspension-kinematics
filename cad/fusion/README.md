@@ -1,4 +1,4 @@
-# Fusion script (Phase 3)
+# Fusion script (Phases 3 and 4)
 
 `SuspensionModel/` is an Autodesk Fusion Python script that **reads the
 solver's JSON** and builds the corner in CAD, so the CAD never re-does any
@@ -9,12 +9,15 @@ What it builds, in a brand-new design:
 
 | Item | What it is |
 |---|---|
-| **Hardpoints (master)** sketch | A 3D sketch with every hardpoint as a fixed point, a line for each A-arm leg, the tie rod and the pushrod, the kingpin axis (construction line from the ground to above the upper ball joint) and WC to CP |
-| **Upper A-arm**, **Lower A-arm**, **Tie rod**, **Pushrod** components | Tubes along each link (Pipe feature), a sphere at each ball joint and a rod-end eye at each chassis pivot |
+| **Hardpoints (master)** sketch | A 3D sketch with every hardpoint as a fixed point, a line for each A-arm leg, the tie rod, the pushrod, the rocker triangle and the damper, plus construction lines for the kingpin axis (from the ground to above the upper ball joint), the rocker pivot axis and WC to CP |
+| **Upper A-arm**, **Lower A-arm**, **Tie rod**, **Pushrod** components | Tubes along each link (Pipe feature), a sphere at each ball joint and a rod-end eye at each pivot. The pushrod has rod ends at both ends, bolted parallel to the rocker axis at the top and to the lower-arm pivot axis at the bottom |
+| **Rocker** component | A triangle of bars (pivot to pushrod, pivot to damper, and the web between), a pivot boss along the rocker axis and an eye at each end |
+| **Damper** component | A body and shaft between the chassis mount (SHC) and the rocker (SHR), with an eye at each end |
 | **Tyre (reference)** component | A see-through ring the size of the tyre, to check the joints sit inside the wheel |
 | STEP file | Everything above, exported for other CAD tools or for sharing |
 
-When it finishes it shows caster, KPI and every link length. Compare caster
+When it finishes it shows caster, KPI and every link length, including the
+pushrod and the damper's eye-to-eye length. Compare caster
 and KPI with `suspkin sweep` output to confirm you loaded the right file.
 
 ## Install (once per PC)
@@ -84,9 +87,12 @@ Things to know:
 * **Pipe feature:** if your Fusion version's Pipe API fails, the script makes
   a plain tube body instead and says so in the finish message. Those tubes
   won't follow parameter changes.
-* **Pushrod:** for now the "pushrod" is the direct-acting spring/damper line
-  SHC to SHU, the same placeholder the solver uses. It will become a real
-  pushrod and rocker in a later phase.
+* **Pushrod and rocker:** drawn from the JSON's `"rocker"` block (hardpoints
+  file) or the rocker points in each pose (`*_poses.json`), so a poses file
+  shows the rocker turned to match the wheel travel you pick. Older files
+  without a rocker still work: the pushrod is then drawn as the direct-acting
+  SHC to SHU line, as in Phase 3. Rocker and damper sizes are in the
+  *Settings* block (`ROCKER_BAR_RADIUS_MM`, `DAMPER_BODY_RADIUS_MM`, ...).
 * **Fusion caches Python modules.** The script reloads its helper each run,
   so edits take effect. If something still seems stale, restart Fusion.
 * **Script not showing up?** Some older Fusion versions want

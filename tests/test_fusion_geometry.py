@@ -110,8 +110,8 @@ def test_trim_segment():
 def test_tubes_are_trimmed_and_on_link_lines(model):
     pts = model["points"]
     segs = geo.tube_segments(pts, ball_radius_mm=11.0, rod_end_radius_mm=11.0, overlap_mm=1.0)
-    assert [s["name"] for s in segs] == [lk[0] for lk in geo.SKELETON_LINKS]
-    for seg, (_n, a, b, _g) in zip(segs, geo.SKELETON_LINKS):
+    assert [s["name"] for s in segs] == [lk[0] for lk in geo.skeleton_links(pts)]
+    for seg, (_n, a, b, _g) in zip(segs, geo.skeleton_links(pts)):
         assert geo.distance(seg["start"], pts[a]) == pytest.approx(10.0)
         assert geo.distance(seg["end"], pts[b]) == pytest.approx(10.0)
         full = geo.distance(pts[a], pts[b])
@@ -120,7 +120,7 @@ def test_tubes_are_trimmed_and_on_link_lines(model):
 
 def test_rod_end_axes_are_perpendicular_to_links(model):
     pts = model["points"]
-    for link in geo.SKELETON_LINKS:
+    for link in geo.skeleton_links(pts):
         _n, a, b, group = link
         axis = geo.rod_end_axis(pts, link)
         assert geo.norm(axis) == pytest.approx(1.0)
@@ -227,3 +227,129 @@ def test_fusion_script_falls_back_when_components_are_refused(monkeypatch):
     message = ui.messageBox.call_args[0][0]
     assert message.startswith("Built: "), message
     assert "only one component" in message
+
+
+# --- Phase 4: pushrod, rocker and damper ------------------------------------
+def legacy_direct_acting_raw():
+    """A Phase 3 style hardpoints file: SHU on the upright, no rocker block."""
+    raw = json.loads(OPTIMIZED.read_text())
+    del raw["rocker"]
+    raw["upright"]["SHU"] = [0.0, 545.0, 145.0]
+    return raw
+
+
+def test_rocker_points_and_axis_are_read(model):
+    hp = sk.load_hardpoints(OPTIMIZED)
+    assert geo.has_rocker(model["points"])
+    assert model["rocker_axis"] == pytest.approx(tuple(hp.rocker.axis))
+    assert model["pushrod_mount"] == "lower_arm"
+    for name, p in hp.rocker.points.items():
+        assert model["points"][name] == pytest.approx(tuple(p))
+    assert [lk[1:3] for lk in geo.skeleton_links(model["points"])][-1] == ("PRI", "PRO")
+
+
+def test_poses_file_carries_rocker_points_at_any_travel(tmp_path):
+    hp = sk.load_hardpoints(OPTIMIZED)
+    poses = sk.bump_sweep(hp, travel_mm=30, step_mm=10)
+    path = tmp_path / "opt_poses.json"
+    sk.write_poses_json(poses, path, name=hp.name, rocker=hp.rocker)
+    model = geo.load_model(path, travel_mm=30.0)
+    assert model["rocker_axis"] == pytest.approx(tuple(hp.rocker.axis))
+    bump = poses[-1]
+    for name in ("PRO", "PRI", "SHR"):
+        assert model["points"][name] == pytest.approx(tuple(bump.points[name]), abs=1e-4)
+    # The pushrod is still its design length in the drawn pose.
+    lengths = geo.link_lengths(model["points"])
+    assert lengths["Pushrod"] == pytest.approx(hp.rocker.pushrod_length, abs=1e-3)
+
+
+def test_old_direct_acting_file_still_draws():
+    model = geo.parse_model(legacy_direct_acting_raw())
+    assert model["rocker_axis"] is None
+    assert geo.skeleton_links(model["points"])[-1][1:3] == ("SHC", "SHU")
+    assert "Damper (eye to eye)" not in geo.link_lengths(model["points"])
+
+
+def test_rocker_block_without_axis_is_rejected():
+    raw = json.loads(OPTIMIZED.read_text())
+    del raw["rocker"]["axis"]
+    with pytest.raises(ValueError, match="axis"):
+        geo.parse_model(raw)
+
+
+def test_pushrod_has_rod_ends_bolted_parallel_to_the_rocker(model):
+    pts = model["points"]
+    link = geo.PUSHROD_LINK
+    assert geo.end_styles(pts, link) == ("rod_end", "rod_end")
+    pushrod = geo.unit(geo.sub(pts["PRO"], pts["PRI"]))
+    at_rocker = geo.rod_end_axis(pts, link, at="PRI", rocker_axis=model["rocker_axis"])
+    at_arm = geo.rod_end_axis(pts, link, at="PRO", rocker_axis=model["rocker_axis"])
+    for axis in (at_rocker, at_arm):
+        assert geo.dot(axis, pushrod) == pytest.approx(0.0, abs=1e-12)
+    assert abs(geo.dot(at_rocker, model["rocker_axis"])) > 0.99
+    lower_pivot = geo.unit(geo.sub(pts["LAA"], pts["LAF"]))
+    assert abs(geo.dot(at_arm, lower_pivot)) > 0.9
+
+
+def test_rocker_is_flat_and_damper_parts_line_up(model):
+    pts = model["points"]
+    assert geo.rocker_plane_error_deg(pts, model["rocker_axis"]) < 1.0
+    a0, a1 = geo.rocker_axis_line(pts, model["rocker_axis"], half_length_mm=30.0)
+    assert geo.lerp(a0, a1, 0.5) == pytest.approx(pts["RKP"])
+    body_start, body_end, shaft_end = geo.damper_segments(pts, 110.0, 11.0)
+    shc, shr = pts["SHC"], pts["SHR"]
+    assert geo.distance(shc, body_start) == pytest.approx(11.0)
+    assert geo.distance(body_start, body_end) == pytest.approx(110.0)
+    assert geo.distance(shaft_end, shr) == pytest.approx(11.0)
+    lengths = geo.link_lengths(pts)
+    assert lengths["Damper (eye to eye)"] == pytest.approx(geo.distance(shc, shr))
+
+
+def test_fusion_script_builds_rocker_and_damper_components(monkeypatch):
+    """With a rocker in the JSON, the fake Fusion run adds two more components."""
+    import importlib
+    from unittest import mock
+
+    def run_with(path):
+        adsk = mock.MagicMock()
+        for name, mod in {"adsk": adsk, "adsk.core": adsk.core, "adsk.fusion": adsk.fusion}.items():
+            monkeypatch.setitem(sys.modules, name, mod)
+        import SuspensionModel as script
+        script = importlib.reload(script)
+        root = adsk.fusion.Design.cast.return_value.rootComponent
+        root.occurrences.addNewComponent.return_value.component.features.baseFeatures.add \
+            .return_value.bodies.count = 1
+        monkeypatch.setattr(script, "DEFAULT_JSON", str(path))
+        monkeypatch.setattr(script, "EXPORT_STEP", False)
+        script.run(None)
+        ui = adsk.core.Application.get.return_value.userInterface
+        return ui.messageBox.call_args[0][0], root.occurrences.addNewComponent.call_count
+
+    message, n_rocker = run_with(OPTIMIZED)
+    assert message.startswith("Built: "), message
+    assert "Damper (eye to eye)" in message
+    # 4 tube parts + rocker + damper + tyre
+    assert n_rocker == 7
+
+
+def test_fusion_script_still_runs_on_a_direct_acting_file(monkeypatch, tmp_path):
+    import importlib
+    from unittest import mock
+
+    path = tmp_path / "old.json"
+    path.write_text(json.dumps(legacy_direct_acting_raw()))
+    adsk = mock.MagicMock()
+    for name, mod in {"adsk": adsk, "adsk.core": adsk.core, "adsk.fusion": adsk.fusion}.items():
+        monkeypatch.setitem(sys.modules, name, mod)
+    import SuspensionModel as script
+    script = importlib.reload(script)
+    root = adsk.fusion.Design.cast.return_value.rootComponent
+    root.occurrences.addNewComponent.return_value.component.features.baseFeatures.add \
+        .return_value.bodies.count = 1
+    monkeypatch.setattr(script, "DEFAULT_JSON", str(path))
+    monkeypatch.setattr(script, "EXPORT_STEP", False)
+    script.run(None)
+    message = adsk.core.Application.get.return_value.userInterface.messageBox.call_args[0][0]
+    assert message.startswith("Built: "), message
+    assert "direct-acting" in message
+    assert root.occurrences.addNewComponent.call_count == 5  # 4 parts + tyre
