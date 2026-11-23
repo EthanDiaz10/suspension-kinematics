@@ -200,3 +200,28 @@ def test_fusion_script_runs_against_a_fake_api(monkeypatch, tmp_path):
     assert "STEP: " + step in message
     caster, kpi = geo.kingpin_angles_deg(geo.load_model(OPTIMIZED)["points"])
     assert "KPI {:.2f}".format(kpi) in message
+
+
+def test_fusion_script_falls_back_when_components_are_refused(monkeypatch):
+    """Part Design documents allow one component; the script must still finish."""
+    import importlib
+    from unittest import mock
+
+    adsk = mock.MagicMock()
+    for name, mod in {"adsk": adsk, "adsk.core": adsk.core, "adsk.fusion": adsk.fusion}.items():
+        monkeypatch.setitem(sys.modules, name, mod)
+    import SuspensionModel as script
+    script = importlib.reload(script)
+
+    ui = adsk.core.Application.get.return_value.userInterface
+    root = adsk.fusion.Design.cast.return_value.rootComponent
+    root.occurrences.addNewComponent.side_effect = RuntimeError("not allowed")
+    root.features.baseFeatures.add.return_value.bodies.count = 1
+    monkeypatch.setattr(script, "DEFAULT_JSON", str(OPTIMIZED))
+    monkeypatch.setattr(script, "EXPORT_STEP", False)
+
+    script.run(None)
+
+    message = ui.messageBox.call_args[0][0]
+    assert message.startswith("Built: "), message
+    assert "only one component" in message

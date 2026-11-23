@@ -137,11 +137,22 @@ def add_user_parameters(design):
             params.add(name, adsk.core.ValueInput.createByString(value), "mm", comment)
 
 
-def new_component(root, name):
-    """Add an empty component at the origin (no move, no rotation)."""
-    occ = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())
-    occ.component.name = name
-    return occ.component
+def new_component(root, name, notes=None):
+    """Add an empty component at the origin (no move, no rotation).
+
+    Newer Fusion versions have "Part Design" documents that allow only one
+    component. If adding a component is refused, everything goes into the
+    root component instead (bodies keep their names, so it's still tidy).
+    """
+    try:
+        occ = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())
+        occ.component.name = name
+        return occ.component
+    except Exception:
+        if notes is not None and not any("one component" in n for n in notes):
+            notes.append("This document type allows only one component, "
+                         "so all parts were built in the root component.")
+        return root
 
 
 def add_solid_bodies(comp, named_bodies, feature_name):
@@ -265,7 +276,7 @@ def end_fitting_bodies(points, links):
     return bodies
 
 
-def build_tyre(root, model):
+def build_tyre(root, model, notes):
     """A see-through ring the size of the tyre, for visual reference."""
     inner_face, outer_face, radius = geo.wheel_cylinder(
         model["points"], model["wheel_axis"], TYRE_WIDTH_MM
@@ -278,7 +289,7 @@ def build_tyre(root, model):
     hole = tbm.createCylinderOrCone(p0, r_in, p1, r_in)
     tbm.booleanOperation(tyre, hole, adsk.fusion.BooleanTypes.DifferenceBooleanType)
 
-    comp = new_component(root, "Tyre (reference)")
+    comp = new_component(root, "Tyre (reference)", notes)
     base = add_solid_bodies(comp, [("Tyre", tyre)], "Tyre")
     for i in range(base.bodies.count):
         base.bodies.item(i).opacity = TYRE_OPACITY
@@ -333,7 +344,7 @@ def build(ui, json_path):
     sizes_mm = {name: float(value.split()[0]) for name, value, _c in PARAMETERS}
     segments = geo.tube_segments(points, BALL_JOINT_RADIUS_MM, ROD_END_RADIUS_MM)
     for group, (comp_name, od_param, wall_param) in PARTS.items():
-        comp = new_component(root, comp_name)
+        comp = new_component(root, comp_name, notes)
         links = [lk for lk in geo.SKELETON_LINKS if lk[3] == group]
         for seg in segments:
             if seg["group"] == group:
@@ -344,7 +355,7 @@ def build(ui, json_path):
 
     # 3. Reference tyre
     if DRAW_TYRE:
-        build_tyre(root, model)
+        build_tyre(root, model, notes)
 
     app.activeViewport.fit()
 
