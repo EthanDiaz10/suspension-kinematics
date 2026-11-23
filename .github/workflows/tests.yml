@@ -15,5 +15,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e ".[dev]"
+      # gmsh (for the Phase 9 FEA check) needs a few graphics libraries even headless.
+      - run: sudo apt-get update && sudo apt-get install -y libglu1-mesa libxcursor1 libxinerama1 libxft2
+      - run: pip install -e ".[dev,fea]"
       - run: pytest -q
