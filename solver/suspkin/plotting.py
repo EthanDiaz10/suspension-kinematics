@@ -376,3 +376,81 @@ def plot_full_car(result, path: str | Path | None = None, title: str | None = No
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(path, dpi=150, facecolor=SURFACE)
     return fig
+
+
+def plot_loads(result, path: str | Path | None = None, title: str | None = None) -> plt.Figure:
+    """Link forces in every load case, and each member's safety factor.
+
+    ``result`` is a ``loads.LoadsResult``. Left: one grid per corner, a row per
+    link and a column per load case, coloured orange for tension (pull) and
+    blue for compression (push), with the force in kN written in each cell.
+    Right: the lowest safety factor of each member group on each axle, against
+    the required one.
+    """
+    from matplotlib.colors import LinearSegmentedColormap
+
+    from .loads import GROUP_LABELS, MEMBER_GROUPS
+
+    # Diverging: blue = compression, neutral grey at zero, orange = tension.
+    cmap = LinearSegmentedColormap.from_list("push_pull", [SERIES[0], "#efeeea", SERIES[1]])
+    corners = list(result.corners.values())
+    vmax = max(abs(x) for c in corners for f in c.forces for x in f.members.values()) / 1000.0
+
+    fig = plt.figure(figsize=(16, 7.2), facecolor=SURFACE)
+    grid = fig.add_gridspec(2, 2, width_ratios=(2.3, 1.0), hspace=0.55, wspace=0.28)
+    names = {"upper_front": "upper A-arm, front leg", "upper_rear": "upper A-arm, rear leg",
+             "lower_front": "lower A-arm, front leg", "lower_rear": "lower A-arm, rear leg",
+             "tie_rod": "tie rod", "pushrod": "pushrod"}
+    for row, c in enumerate(corners):
+        ax = fig.add_subplot(grid[row, 0])
+        table = c.member_table()
+        data = np.array([table[m] for m in MEMBER_GROUPS]) / 1000.0  # kN
+        ax.imshow(data, cmap=cmap, vmin=-vmax, vmax=vmax, aspect="auto")
+        for i in range(data.shape[0]):
+            for j in range(data.shape[1]):
+                ax.text(j, i, f"{data[i, j]:+.1f}", ha="center", va="center", fontsize=8, color=INK)
+        labels = [names[m] if not (m == "tie_rod" and c.axle == "rear") else "toe link"
+                  for m in MEMBER_GROUPS]
+        ax.set_yticks(range(len(labels)), labels, fontsize=8, color=INK_MUTED)
+        ax.set_xticks(range(len(c.labels)), [lb.replace(" (", "\n(") for lb in c.labels],
+                      fontsize=8, color=INK_MUTED)
+        ax.tick_params(length=0)
+        for s in ax.spines.values():
+            s.set_visible(False)
+        ax.set_title(f"{c.axle.capitalize()}-left corner: link force, kN  "
+                     "(+ orange = tension, − blue = compression)",
+                     loc="left", fontsize=11, color=INK, fontweight="bold")
+
+    # Safety factors: lowest of tension, buckling and rod end per group and axle.
+    ax = fig.add_subplot(grid[:, 1])
+    groups = list(GROUP_LABELS)
+    y = np.arange(len(groups))
+    height = 0.36
+    top = 0.0
+    for k, (axle, colour) in enumerate(zip(("front", "rear"), SERIES)):
+        sfs = [min(m.sf for m in result.checks if m.axle == axle and m.group == g) for g in groups]
+        top = max(top, max(sfs))
+        ax.barh(y + (k - 0.5) * height, sfs, height=height, color=colour, edgecolor=SURFACE,
+                linewidth=2, label=axle)
+        for yi, s in zip(y, sfs):
+            ax.text(s + 0.1, yi + (k - 0.5) * height, f"{s:.1f}", va="center", fontsize=8, color=INK)
+    req = result.config.required_sf
+    ax.axvline(req, color=INK_MUTED, linewidth=1, linestyle="--")
+    ax.text(req + 0.1, len(groups) - 0.45, f"required {req:g}", fontsize=8, color=INK_MUTED)
+    ax.set_yticks(y, [GROUP_LABELS[g] for g in groups])
+    ax.set_ylim(len(groups) - 0.3, -0.7)
+    ax.set_xlim(0, top * 1.18)
+    ax.set_axisbelow(True)
+    _style(ax, "Lowest safety factor", "", zero_line=False)
+    ax.set_xlabel("capacity / worst load (tension, buckling or rod end)", fontsize=9, color=INK_MUTED)
+    ax.grid(True, axis="x", color=GRID, linewidth=0.8)
+    ax.grid(False, axis="y")
+    ax.legend(frameon=False, fontsize=9, labelcolor=INK_MUTED, loc="lower right")
+
+    fig.suptitle(title or "Suspension link forces and safety factors", x=0.01, ha="left",
+                 fontsize=13, color=INK, fontweight="bold")
+    fig.subplots_adjust(left=0.13, right=0.98, top=0.9, bottom=0.08)
+    if path is not None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(path, dpi=150, facecolor=SURFACE)
+    return fig

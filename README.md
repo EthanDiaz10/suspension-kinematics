@@ -11,7 +11,7 @@ caster, KPI, scrub, trail, roll centre, motion ratio through a pushrod and
 rocker, and anti-dive over the full wheel travel, plus steering angles and
 Ackermann over the full rack travel, and roll camber, roll steer, the roll
 centre, roll stiffness (springs and anti-roll bar) and roll per g as the body rolls, for the
-front and the rear corner, and how the whole car shares its load transfer, with no manual remodelling. Or let the optimiser move the hardpoints for you,
+front and the rear corner, how the whole car shares its load transfer, and the force in every link under braking, cornering, bumps and acceleration, with tube and rod end safety factors, with no manual remodelling. Or let the optimiser move the hardpoints for you,
 toward targets you set, while keeping the joints inside a 10" rim.
 
 ![Bump sweep of the baseline front corner](docs/images/bump_sweep.png)
@@ -32,6 +32,7 @@ suspkin sweep data/baseline_fsae_front.json   # writes CSV, JSON and plots to re
 suspkin steer data/baseline_fsae_front.json   # steering sweep and Ackermann
 suspkin roll data/optimized_front.json        # body roll, anti-roll bar, roll per g
 suspkin car data/optimized_front.json data/optimized_rear.json   # whole car, real front + rear
+suspkin loads data/optimized_front.json data/optimized_rear.json # link forces, tube sizing
 suspkin check data/baseline_fsae_front.json   # do the joints fit inside the rim?
 suspkin optimize data/baseline_fsae_front.json data/optimize_front.json   # ~2 minutes
 pytest                                         # run the tests
@@ -73,7 +74,7 @@ sk.plot_sweep(metrics, "my_change.png")
 | Folder | What lives there |
 |---|---|
 | `solver/suspkin/` | The Python package: hardpoint loading, the solver, pushrod/rocker stage, metrics, side-view, steering and roll analysis, rim packaging check, optimiser, plots, CLI |
-| `data/` | Hardpoint sets and optimiser settings as JSON. Copy the baseline to start a new design |
+| `data/` | Hardpoint sets, optimiser settings and load cases (`load_cases.json`) as JSON. Copy the baseline to start a new design |
 | `tests/` | `pytest` checks (link lengths preserved, sign conventions, rim clashes, optimiser) |
 | `notebooks/` | Jupyter notebooks for exploring designs |
 | `cad/fusion/` | Fusion script that builds the sketch, tubes and joints from solver output and exports STEP ([how to run it](cad/fusion/README.md)) |
@@ -524,6 +525,128 @@ Try other rear bar rates by editing `"rate_nm_per_deg"` in the rear file's
 `arb` block and re-running `suspkin car`: a stiffer rear bar moves load
 transfer to the rear (less understeer) and reduces roll.
 
+## Load cases, link forces and tube sizing (Phase 8)
+
+![Link forces and safety factors](docs/images/loads.png)
+
+```bash
+suspkin loads data/optimized_front.json data/optimized_rear.json
+```
+
+answers "will these tubes and rod ends survive?" (`solver/suspkin/loads.py`).
+The cases, tube sizes, material and ratings are all in
+[`data/load_cases.json`](data/load_cases.json), so you can change them without
+touching code.
+
+### 1. Load cases
+
+| Case | What happens | Why that number |
+|---|---|---|
+| `cornering` | 1.6 g sideways | a little above the 1.5 g design load; the inside front tyre lifts at about 1.9 g |
+| `braking` | 1.6 g braking | peak straight-line stop |
+| `braking_cornering` | 1.1 g braking + 1.1 g sideways | trail braking, about 1.56 g combined |
+| `acceleration` | 1.0 g forward | traction-limited launch, rear (driven) axle only |
+| `bump` | 3 × the static corner load, straight up | pothole or kerb strike |
+
+Every link must then hold **1.5 times** its worst case (`required_safety_factor`).
+
+### 2. Tyre loads
+
+Weight moves around the car: forward under braking (`m a h / L`), to the
+outside in a corner (split front/rear by the real roll stiffness from
+`suspkin car`, so it matches its tyre loads exactly). Every tyre is assumed to
+use the same share of its grip, so its sideways and braking forces are just
+`a × Fz`. A cornering tyre's sideways force acts 20 mm **behind** the contact
+patch (the pneumatic trail, its self-aligning torque); without that the rear
+toe link would carry nothing, because the rear has no caster. Drive force
+acts at the wheel centre (the halfshaft takes the torque into the chassis-mounted
+diff), braking at the contact patch (outboard brakes).
+
+Only the left corners are modelled, so each cornering case is solved twice:
+the left wheel on the **inside** of a left turn and on the **outside** of a
+right turn (the mirror image of the right wheel in a left turn).
+
+### 3. The force in every link
+
+With a rod end or spherical bearing at each end, a wishbone leg, the tie rod
+or the pushrod can only push or pull along its length (a **two-force
+member**), so each link has one unknown. The upright must be in balance:
+forces add to zero (3 equations) and moments add to zero (3 more).
+
+The pushrod sits on the **lower arm**, not the upright, so the lower arm is a
+rigid triangle held up by the pushrod. The solver takes the full 3D force at
+the lower ball joint (3 unknowns) plus the pushrod force, and adds one
+equation: the lower arm mustn't spin about its chassis pivots. That makes 7
+equations and 7 unknowns, solved exactly. The lower arm's leg forces then
+follow from the ball joint and pushrod forces (with the bracket treated as if
+it sat on the ball joint; the small leftover, 2 to 6% of the biggest link
+force, is reported as bracket bending).
+
+Two tests check this from different directions: the link forces on the
+upright cancel the tyre load exactly, and the pushrod force agrees with a
+**virtual work** check that uses only the kinematic solver (move the wheel a
+tiny bit: the work done by the tyre load and by the pushrod must add to zero).
+
+### 4. Tubes and rod ends
+
+Each link is a 4130 chromoly tube (yield 435 MPa, E 205 GPa), pinned at both
+ends and as long as its joint centres:
+
+* **Tension:** safety factor = yield stress × area / worst pull.
+* **Compression:** a long, thin tube bows sideways and **buckles** well below
+  yield. Euler's formula `P = π² E I / L²` covers slender tubes; short, stocky
+  ones would come out stronger than the steel itself, so below the crossover
+  slenderness the Johnson parabola is used instead.
+* **Rod ends and ball joints:** worst force against the rated load.
+
+### Results
+
+| Member (front / rear) | Tube, mm | Worst load | Lowest safety factor |
+|---|---|---|---|
+| Upper A-arm | 19.05 × 1.65 | 1.9 kN pull (front, trail braking) | 10.7 / 17.2 (rod end) |
+| Lower A-arm | 19.05 × 1.65 | 5.1 kN push, front rear leg, trail braking (outside) | 3.9 / 8.0 (rod end) |
+| Tie rod / toe link | 15.875 × 1.65 | 1.2 kN pull (front, trail braking) | 12.8 / 19.8 (rod end) |
+| Pushrod | 15.875 × 1.24 | 3.1 kN push (rear, bump) | 5.5 / 4.8 (rod end) |
+| Lower ball joint | | 4.3 kN (front, trail braking) | 5.7 |
+
+Everything passes with room to spare. The **front lower arm** works hardest:
+under braking its front leg pulls and its rear leg pushes about 5 kN, because
+it reacts the braking force and the brake torque. The **pushrods** are next,
+in the 3 g bump. The rod ends set the lowest safety factors, and their ratings
+in `load_cases.json` are **placeholders**: put in the static radial rating of
+the parts you'd actually buy.
+
+The lightest catalogue tube that still passes yield and buckling would be
+12.7 × 0.89 for the upper arms and tie rods, 15.875 × 0.89 for the lower arms
+(SF 2.4) and 12.7 × 0.89 for the pushrods (SF 2.4). Real arms usually stay a
+size or two above that for stiffness (bending under the pushrod bracket, which
+this static check doesn't size), crash damage and easier welding, so treat it
+as the floor, not the answer.
+
+The run also prints a note on **brake bias**: to lock all four tyres together
+at 1.6 g the front needs about 77% of the braking, and the vehicle block has
+65%. At 65% the rears lock first in a hard stop, which makes the car unstable.
+
+### Files it writes (in `results/`)
+
+| File | What's in it |
+|---|---|
+| `*_link_forces.csv` | tyre forces and every link force, per case and corner |
+| `*_margins.csv` | worst pull and push, and the three safety factors, per link |
+| `*_upright_loads.json` | the force on each upright joint (UBJ, LBJ, RTO) per case |
+| `*_loads.png` | the plot above |
+
+**Stress check in Fusion:** in a Static Stress study on your upright, put a
+**fixed** constraint on the wheel-bearing bore and apply the forces from
+`*_upright_loads.json` as loads on the ball joint and steering-arm holes, one
+load case at a time (start with `braking_cornering (outside)` on the front,
+the worst for the lower ball joint). The bore's reaction is then the tyre
+load, so the joint forces and the tyre load are consistent.
+
+**Simplifications:** loads are applied at ride-height geometry, the tyres' own
+overturning and rolling-resistance moments are ignored, parts are rigid, and
+the rocker, damper and anti-roll bar forces aren't computed yet.
+
 ## Working on more than one PC
 
 Git keeps every PC in sync through GitHub. Set up each PC once:
@@ -568,7 +691,8 @@ Tips:
 - [x] **Phase 6:** front anti-roll bar, roll per g, front/rear load transfer split, static camber chosen for the design cornering load
 - [ ] Draw the anti-roll bar in the Fusion script
 - [x] **Phase 7:** rear corner (toe link, anti-squat and anti-lift, rear anti-roll bar), `suspkin car` for the whole-car roll stiffness split, load transfer, roll per g and tyre loads, rear corner in the Fusion script
-- [ ] **Phase 8:** load cases, link forces, tube sizing (and an upright stress check)
+- [x] **Phase 8:** load cases, tyre loads, the force in every link, tube (yield, Euler/Johnson buckling) and rod end checks, lightest passing tube, upright loads exported for a Fusion stress check
+- [ ] Rocker, damper and anti-roll bar forces; joint loads at full bump instead of ride height
 - [ ] **Phase 9:** full-car Fusion assembly, renders and a design report
 
 ## License
