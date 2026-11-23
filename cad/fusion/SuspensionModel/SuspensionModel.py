@@ -6,13 +6,15 @@ What it does, in order:
    sweep output file (``results/*_poses.json``, then it asks which wheel
    travel to draw).
 2. Opens a new Fusion design and draws a **master 3D sketch**: every hardpoint
-   as a fixed sketch point, a line for each A-arm leg, the tie rod and the
-   pushrod, and the kingpin axis (from the ground up past the upper ball joint)
-   as a construction line.
+   as a fixed sketch point, a line for each A-arm leg, the tie rod, the
+   pushrod, the rocker triangle and the damper, and the kingpin axis (from the
+   ground up past the upper ball joint) and rocker pivot axis as construction
+   lines.
 3. Builds simple solids, one component per part: tubes along each link (Pipe
    feature, sizes are user parameters you can change later in
    *Modify > Change Parameters*), a sphere for each ball joint, a rod-end eye
-   at each inboard pivot, and a see-through tyre for reference.
+   at each pivot, the rocker (as a triangle of bars around a pivot boss), the
+   damper (body and shaft) and a see-through tyre for reference.
 4. Exports everything as a STEP file.
 
 How to install and run it: see ``cad/fusion/README.md``.
@@ -79,6 +81,15 @@ PARTS = {
 BALL_JOINT_RADIUS_MM = 11.0     # sphere at each outboard (upright) end
 ROD_END_RADIUS_MM = 11.0        # rod-end eye at each inboard (chassis) end
 ROD_END_WIDTH_MM = 12.0         # eye thickness along its bolt
+
+# Rocker and damper (only drawn when the JSON has a pushrod/rocker). Simple
+# stand-ins sized like an FSAE part, so you can see the layout and clearances.
+ROCKER_BAR_RADIUS_MM = 7.0      # each side of the rocker triangle
+ROCKER_BOSS_RADIUS_MM = 13.0    # pivot boss around the rocker bearing
+ROCKER_BOSS_LENGTH_MM = 30.0    # along the pivot axis
+DAMPER_BODY_RADIUS_MM = 22.0    # damper body (about 44 mm diameter)
+DAMPER_BODY_LENGTH_MM = 110.0
+DAMPER_SHAFT_RADIUS_MM = 6.0
 
 # Reference tyre (set DRAW_TYRE = False to skip it)
 DRAW_TYRE = True
@@ -202,7 +213,7 @@ def make_tube_with_temp_brep(start, end, od_mm, wall_mm):
 # Building the model
 # ===========================================================================
 
-def build_master_sketch(root, points):
+def build_master_sketch(root, points, rocker_axis=None):
     """One 3D sketch with every hardpoint, link line and the kingpin axis."""
     sketch = root.sketches.add(root.xYConstructionPlane)
     set_name(sketch, "Hardpoints (master)")
@@ -213,12 +224,19 @@ def build_master_sketch(root, points):
     # On the root XY plane, sketch coordinates are the same as model coordinates.
     sketch_points = {}
     for name in geo.ALL_POINTS:
-        sp = sketch.sketchPoints.add(fusion_point(points[name]))
-        sketch_points[name] = sp
+        if name in points:   # SHU only on old designs, rocker points only on new
+            sketch_points[name] = sketch.sketchPoints.add(fusion_point(points[name]))
 
     lines = sketch.sketchCurves.sketchLines
-    for _label, a, b, _group in geo.SKELETON_LINKS:
+    for _label, a, b, _group in geo.skeleton_links(points):
         lines.addByTwoPoints(sketch_points[a], sketch_points[b])
+
+    if rocker_axis is not None:
+        # Rocker triangle and damper line, then the pivot axis as construction.
+        for a, b in (("RKP", "PRI"), ("RKP", "SHR"), ("PRI", "SHR"), ("SHR", "SHC")):
+            lines.addByTwoPoints(sketch_points[a], sketch_points[b])
+        a0, a1 = geo.rocker_axis_line(points, rocker_axis)
+        lines.addByTwoPoints(fusion_point(a0), fusion_point(a1)).isConstruction = True
 
     # Kingpin (steering) axis as a construction line: ground -> above UBJ.
     ground, top = geo.kingpin_line(points)
@@ -265,27 +283,80 @@ def build_tube(comp, seg, od_param, wall_param, od_mm, wall_mm, notes):
         add_solid_bodies(comp, [(seg["name"], body)], seg["name"] + " (tube)")
 
 
-def end_fitting_bodies(points, links):
+def eye_body(centre_mm, axis, radius_mm, width_mm):
+    """A short cylinder (rod-end eye, boss) centred on a point, along ``axis``."""
+    tbm = adsk.fusion.TemporaryBRepManager.get()
+    half = geo.scale(axis, width_mm / 2.0)
+    r = radius_mm / geo.MM_PER_CM
+    return tbm.createCylinderOrCone(fusion_point(geo.sub(centre_mm, half)), r,
+                                    fusion_point(geo.add(centre_mm, half)), r)
+
+
+def end_fitting_bodies(model, links):
     """Ball-joint spheres and rod-end eyes for one part's links."""
+    points = model["points"]
     tbm = adsk.fusion.TemporaryBRepManager.get()
     bodies = []
     done = set()
     r_ball = BALL_JOINT_RADIUS_MM / geo.MM_PER_CM
-    r_eye = ROD_END_RADIUS_MM / geo.MM_PER_CM
     for link in links:
         label, inboard, outboard, _group = link
-        # Rod end: a short cylinder centred on the pivot, along its bolt axis.
-        axis = geo.rod_end_axis(points, link)
-        half = geo.scale(axis, ROD_END_WIDTH_MM / 2.0)
-        p0 = fusion_point(geo.sub(points[inboard], half))
-        p1 = fusion_point(geo.add(points[inboard], half))
-        bodies.append(("Rod end " + inboard, tbm.createCylinderOrCone(p0, r_eye, p1, r_eye)))
-        # Ball joint: one sphere per outboard point (two A-arm legs share one).
-        if outboard not in done:
-            done.add(outboard)
-            sphere = tbm.createSphere(fusion_point(points[outboard]), r_ball)
-            bodies.append(("Ball joint " + outboard, sphere))
+        styles = geo.end_styles(points, link)
+        for name, style in zip((inboard, outboard), styles):
+            if name in done:
+                continue   # two A-arm legs share one ball joint
+            done.add(name)
+            if style == "rod_end":
+                # Rod end: a short cylinder centred on the pivot, along its bolt.
+                axis = geo.rod_end_axis(points, link, at=name, rocker_axis=model["rocker_axis"],
+                                        pushrod_mount=model["pushrod_mount"])
+                bodies.append(("Rod end " + name,
+                               eye_body(points[name], axis, ROD_END_RADIUS_MM, ROD_END_WIDTH_MM)))
+            else:
+                sphere = tbm.createSphere(fusion_point(points[name]), r_ball)
+                bodies.append(("Ball joint " + name, sphere))
     return bodies
+
+
+def bar_body(start_mm, end_mm, radius_mm):
+    """A solid round bar between two points."""
+    tbm = adsk.fusion.TemporaryBRepManager.get()
+    r = radius_mm / geo.MM_PER_CM
+    return tbm.createCylinderOrCone(fusion_point(start_mm), r, fusion_point(end_mm), r)
+
+
+def build_rocker(root, model, notes):
+    """The rocker: a triangle of bars, a pivot boss on its axis and two eyes."""
+    points, axis = model["points"], model["rocker_axis"]
+    bodies = [(name, bar_body(a, b, ROCKER_BAR_RADIUS_MM)) for name, a, b in geo.rocker_bars(points)]
+    bodies.append(("Rocker pivot boss",
+                   eye_body(points["RKP"], axis, ROCKER_BOSS_RADIUS_MM, ROCKER_BOSS_LENGTH_MM)))
+    for name in ("PRI", "SHR"):
+        bodies.append(("Rocker eye " + name,
+                       eye_body(points[name], axis, ROD_END_RADIUS_MM, ROD_END_WIDTH_MM + 4.0)))
+    comp = new_component(root, "Rocker", notes)
+    add_solid_bodies(comp, bodies, "Rocker")
+    if geo.rocker_plane_error_deg(points, axis) > 5.0:
+        notes.append("PRI or SHR sits more than 5 deg out of the rocker's plane; "
+                     "a flat rocker plate won't fit these points.")
+
+
+def build_damper(root, model, notes):
+    """The damper: a fat body at the chassis end, a thin shaft to the rocker."""
+    points = model["points"]
+    body_start, body_end, shaft_end = geo.damper_segments(
+        points, DAMPER_BODY_LENGTH_MM, ROD_END_RADIUS_MM)
+    link = ("Damper", "SHC", "SHR", "damper")
+    bodies = [
+        ("Damper body", bar_body(body_start, body_end, DAMPER_BODY_RADIUS_MM)),
+        ("Damper shaft", bar_body(body_end, shaft_end, DAMPER_SHAFT_RADIUS_MM)),
+    ]
+    for name in ("SHC", "SHR"):
+        axis = geo.rod_end_axis(points, link, at=name, rocker_axis=model["rocker_axis"])
+        bodies.append(("Damper eye " + name,
+                       eye_body(points[name], axis, ROD_END_RADIUS_MM, ROD_END_WIDTH_MM)))
+    comp = new_component(root, "Damper", notes)
+    add_solid_bodies(comp, bodies, "Damper")
 
 
 def build_tyre(root, model, notes):
@@ -351,7 +422,7 @@ def build(ui, json_path):
     add_user_parameters(design)
 
     # 1. Master sketch
-    build_master_sketch(root, points)
+    build_master_sketch(root, points, model["rocker_axis"])
     adsk.doEvents()   # let Fusion redraw so you can watch progress
 
     # 2. One component per part: tubes + end fittings
@@ -360,21 +431,27 @@ def build(ui, json_path):
     segments = geo.tube_segments(points, BALL_JOINT_RADIUS_MM, ROD_END_RADIUS_MM)
     for group, (comp_name, od_param, wall_param) in PARTS.items():
         comp = new_component(root, comp_name, notes)
-        links = [lk for lk in geo.SKELETON_LINKS if lk[3] == group]
+        links = [lk for lk in geo.skeleton_links(points) if lk[3] == group]
         for seg in segments:
             if seg["group"] == group:
                 build_tube(comp, seg, od_param, wall_param,
                            sizes_mm[od_param], sizes_mm[wall_param], notes)
-        add_solid_bodies(comp, end_fitting_bodies(points, links), comp_name + " ends")
+        add_solid_bodies(comp, end_fitting_bodies(model, links), comp_name + " ends")
         adsk.doEvents()
 
-    # 3. Reference tyre
+    # 3. Rocker and damper (pushrod designs only)
+    if model["rocker_axis"] is not None:
+        build_rocker(root, model, notes)
+        build_damper(root, model, notes)
+        adsk.doEvents()
+
+    # 4. Reference tyre
     if DRAW_TYRE:
         build_tyre(root, model, notes)
 
     app.activeViewport.fit()
 
-    # 4. STEP export
+    # 5. STEP export
     step_path = export_step(ui, design, json_path, model) if EXPORT_STEP else None
     return model, step_path, notes
 
@@ -395,7 +472,9 @@ def summary_text(json_path, model, step_path, notes):
         "Link lengths, centre to centre (mm):",
     ]
     for name, length in geo.link_lengths(model["points"]).items():
-        lines.append("  {:<22} {:7.1f}".format(name, length))
+        lines.append("  {:<24} {:7.1f}".format(name, length))
+    if model["rocker_axis"] is None:
+        lines.append("  (no rocker in this file: drawn as a direct-acting damper)")
     lines.append("")
     lines.append("STEP: " + (step_path if step_path else "not exported"))
     if notes:

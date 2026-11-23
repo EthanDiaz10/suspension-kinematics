@@ -13,8 +13,20 @@ scrub radius              positive = steering axis meets the ground INBOARD of
 mechanical trail          positive = steering axis meets the ground AHEAD of
                           the contact patch
 roll centre shift         RC movement relative to the chassis (+ = up)
-motion ratio              spring compression / wheel travel (dimensionless)
+motion ratio              damper compression / wheel travel (dimensionless).
+                          Wheel rate = spring rate x MR^2. Some books call
+                          this the installation ratio, and some define motion
+                          ratio the other way up (wheel / damper), so check
+                          which one a reference uses before comparing.
+rocker angle              rocker rotation from the design position
+anti_brake_pct            anti-dive (front axle) or anti-lift (rear axle), %
+anti_drive_pct            anti-squat (rear) or anti-lift (front), %, NaN if
+                          the axle isn't driven. See ``sideview.py``.
+svic_x_mm / svic_z_mm     side-view instant centre position (chassis frame)
 ========================  =====================================================
+
+Mechanical trail is the same thing as **caster trail**: how far the steering
+axis meets the ground ahead of the contact patch.
 """
 
 from __future__ import annotations
@@ -22,6 +34,7 @@ from __future__ import annotations
 import numpy as np
 
 from .kinematics import Pose
+from .sideview import VehicleParams, anti_percentages, side_view_ic
 
 
 # --- wheel orientation -----------------------------------------------------
@@ -127,19 +140,27 @@ def roll_center_height_mm(pose: Pose) -> float:
 
 # --- spring / damper -------------------------------------------------------
 def spring_length_mm(pose: Pose) -> float:
-    return float(np.linalg.norm(pose.points["SHU"] - pose.points["SHC"]))
+    """Damper eye-to-eye length: chassis end to the rocker (or the upright,
+    for the old direct-acting layout)."""
+    moving_end = "SHR" if "SHR" in pose.points else "SHU"
+    return float(np.linalg.norm(pose.points[moving_end] - pose.points["SHC"]))
 
 
 # --- everything at once ----------------------------------------------------
 METRIC_COLUMNS = (
     "travel_mm", "camber_deg", "toe_deg", "caster_deg", "kpi_deg",
     "scrub_radius_mm", "mech_trail_mm", "roll_center_height_mm",
-    "roll_center_shift_mm", "spring_length_mm", "motion_ratio",
+    "roll_center_shift_mm", "spring_length_mm", "motion_ratio", "rocker_angle_deg",
+    "anti_brake_pct", "anti_drive_pct", "svic_x_mm", "svic_z_mm",
 )
 
 
-def compute_metrics(poses: list[Pose]) -> dict[str, np.ndarray]:
-    """Evaluate every metric over a sweep. Returns column name -> array."""
+def compute_metrics(poses: list[Pose], vehicle: VehicleParams | None = None) -> dict[str, np.ndarray]:
+    """Evaluate every metric over a sweep. Returns column name -> array.
+
+    ``vehicle`` (wheelbase, CG height, brake bias...) is only needed for the
+    anti-dive / anti-squat numbers; without it a default FSAE-sized car is used.
+    """
     out = {
         "travel_mm": np.array([p.travel for p in poses]),
         "camber_deg": np.array([camber_deg(p) for p in poses]),
@@ -150,6 +171,7 @@ def compute_metrics(poses: list[Pose]) -> dict[str, np.ndarray]:
         "mech_trail_mm": np.array([mechanical_trail_mm(p) for p in poses]),
         "roll_center_height_mm": np.array([roll_center_height_mm(p) for p in poses]),
         "spring_length_mm": np.array([spring_length_mm(p) for p in poses]),
+        "rocker_angle_deg": np.degrees([p.rocker_angle for p in poses]),
     }
     # How far the roll centre moves relative to the CHASSIS (0 at ride height).
     # This is what matters for handling: the CG rides with the chassis, so if
@@ -163,9 +185,41 @@ def compute_metrics(poses: list[Pose]) -> dict[str, np.ndarray]:
     # Motion ratio = -d(spring length)/d(wheel travel): positive when the
     # spring compresses as the wheel goes into bump. Needs >= 2 poses.
     if len(poses) >= 2:
-        out["motion_ratio"] = -np.gradient(out["spring_length_mm"], out["travel_mm"])
+        edge = 2 if len(poses) > 2 else 1  # 2nd-order accurate at the ends too
+        out["motion_ratio"] = -np.gradient(out["spring_length_mm"], out["travel_mm"], edge_order=edge)
     else:
         out["motion_ratio"] = np.full(len(poses), np.nan)
+    out.update(side_view_metrics(poses, vehicle or VehicleParams()))
+    return out
+
+
+def side_view_metrics(poses: list[Pose], vehicle: VehicleParams) -> dict[str, np.ndarray]:
+    """SVIC and anti percentages over a sweep (see ``sideview.py``).
+
+    The side-view velocities of WC and CP are d(x)/d(travel) and
+    d(z)/d(travel), taken from neighbouring poses with ``np.gradient``, the same
+    way as the motion ratio. So they need at least 2 poses.
+    """
+    n = len(poses)
+    nan = np.full(n, np.nan)
+    if n < 2:
+        return {"anti_brake_pct": nan, "anti_drive_pct": nan.copy(),
+                "svic_x_mm": nan.copy(), "svic_z_mm": nan.copy()}
+    t = np.array([p.travel for p in poses])
+    wc = np.array([p.points["WC"][[0, 2]] for p in poses])   # (x, z) per pose
+    cp = np.array([p.points["CP"][[0, 2]] for p in poses])
+    edge = 2 if n > 2 else 1                                  # 2nd-order at the ends too
+    v_wc = np.gradient(wc, t, axis=0, edge_order=edge)       # (dx, dz) per mm of travel
+    v_cp = np.gradient(cp, t, axis=0, edge_order=edge)
+
+    svic = np.full((n, 2), np.nan)
+    for i in range(n):
+        ic = side_view_ic(wc[i], cp[i], v_wc[i], v_cp[i])
+        if ic is not None:
+            svic[i] = ic
+    out = anti_percentages(v_cp[:, 0] / v_cp[:, 1], v_wc[:, 0] / v_wc[:, 1], vehicle)
+    out["svic_x_mm"] = svic[:, 0]
+    out["svic_z_mm"] = svic[:, 1]
     return out
 
 
@@ -177,12 +231,12 @@ def rc_migration(metrics: dict[str, np.ndarray]) -> float:
     return float(np.polyfit(metrics["travel_mm"], metrics["roll_center_shift_mm"], 1)[0])
 
 
-def summary(metrics: dict[str, np.ndarray]) -> dict[str, float]:
+def summary(metrics: dict[str, np.ndarray], vehicle: VehicleParams | None = None) -> dict[str, float]:
     """A few headline numbers: values at static ride height and the gains."""
     t = metrics["travel_mm"]
     i0 = int(np.argmin(np.abs(t)))
     slope = lambda key: float(np.gradient(metrics[key], t)[i0])  # noqa: E731
-    return {
+    out = {
         "static_camber_deg": float(metrics["camber_deg"][i0]),
         "static_toe_deg": float(metrics["toe_deg"][i0]),
         "camber_gain_deg_per_10mm": 10 * slope("camber_deg"),
@@ -194,5 +248,19 @@ def summary(metrics: dict[str, np.ndarray]) -> dict[str, float]:
         "roll_center_height_mm": float(metrics["roll_center_height_mm"][i0]),
         "rc_migration_vs_chassis_mm_per_mm": rc_migration(metrics),
         "motion_ratio": float(metrics["motion_ratio"][i0]),
+        # > 0 = rising rate (progressive): the damper moves more per mm of
+        # wheel travel in bump than in droop.
+        "motion_ratio_change_droop_to_bump": float(metrics["motion_ratio"][-1] - metrics["motion_ratio"][0]),
+        "damper_travel_mm": float(np.ptp(metrics["spring_length_mm"])),
         "toe_range_deg": float(np.ptp(metrics["toe_deg"])),
     }
+    # Name the anti numbers the way people say them for this axle.
+    vehicle = vehicle or VehicleParams()
+    brake_name, drive_name = (("anti_dive_pct", "anti_lift_accel_pct") if vehicle.axle == "front"
+                              else ("anti_lift_brake_pct", "anti_squat_pct"))
+    out[brake_name] = float(metrics["anti_brake_pct"][i0])
+    if vehicle.driven:
+        out[drive_name] = float(metrics["anti_drive_pct"][i0])
+    if not np.all(np.isnan(metrics["rocker_angle_deg"])):
+        out["rocker_rotation_deg"] = float(np.ptp(metrics["rocker_angle_deg"]))
+    return out

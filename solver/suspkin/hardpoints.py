@@ -7,6 +7,10 @@ part attaches. Hardpoints come in two groups:
 * **upright points** ride on the upright (the knuckle that carries the wheel)
   and move together as one rigid body.
 
+An optional ``"rocker"`` block adds a pushrod and rocker (see ``rocker.py``).
+With it, the damper runs from ``SHC`` on the chassis to ``SHR`` on the rocker,
+and the upright no longer needs the direct-acting placeholder point ``SHU``.
+
 Coordinate system (SAE/ISO vehicle axes): +X forward, +Y left, +Z up, in mm.
 We model the front-LEFT corner, so "outboard" means +Y.
 """
@@ -20,9 +24,14 @@ from pathlib import Path
 
 import numpy as np
 
+from .rocker import ROCKER_POINTS, RockerGeometry
+
 # The names every hardpoint file must provide.
 CHASSIS_POINTS = ("UAF", "UAA", "LAF", "LAA", "RTI", "SHC")
-UPRIGHT_POINTS = ("UBJ", "LBJ", "RTO", "SHU", "WC", "CP")
+UPRIGHT_POINTS = ("UBJ", "LBJ", "RTO", "WC", "CP")
+# Only needed when there is no "rocker" block (spring/damper bolted straight
+# to the upright, the Phase 1 placeholder).
+DIRECT_ACTING_POINT = "SHU"
 
 
 def wheel_axis_from_angles(camber_deg: float, toe_deg: float) -> np.ndarray:
@@ -49,6 +58,18 @@ class Hardpoints:
     static_camber_deg: float = 0.0
     static_toe_deg: float = 0.0
     extra: dict = field(default_factory=dict)  # descriptions, notes, etc.
+    rocker: RockerGeometry | None = None       # None = direct-acting damper
+
+    def find_point(self, name: str) -> np.ndarray:
+        """The (mutable) array for any named point, whichever group it's in.
+
+        Handy for the optimiser, which nudges points by name.
+        """
+        for group in (self.chassis, self.upright,
+                      self.rocker.points if self.rocker else {}):
+            if name in group:
+                return group[name]
+        raise KeyError(f"no hardpoint called {name!r}")
 
     @property
     def wheel_axis(self) -> np.ndarray:
@@ -64,6 +85,7 @@ class Hardpoints:
             static_camber_deg=self.static_camber_deg,
             static_toe_deg=self.static_toe_deg,
             extra=dict(self.extra),
+            rocker=self.rocker.copy() if self.rocker else None,
         )
 
 
@@ -78,14 +100,50 @@ def load_hardpoints(path: str | Path) -> Hardpoints:
             raise ValueError(f"{path}: '{group}' is missing points {missing}")
         return {n: np.asarray(pts[n], dtype=float) for n in names}
 
-    known = {"name", "chassis", "upright", "static_camber_deg", "static_toe_deg"}
+    rocker = None
+    upright_names = UPRIGHT_POINTS + (DIRECT_ACTING_POINT,)
+    if "rocker" in raw:
+        rocker = parse_rocker(raw["rocker"], source=str(path))
+        upright_names = UPRIGHT_POINTS  # SHU not needed with a rocker
+
+    upright = read_group("upright", upright_names)
+    # Keep any other upright points the file defines (e.g. an old SHU).
+    for k, v in raw["upright"].items():
+        upright.setdefault(k, np.asarray(v, dtype=float))
+
+    known = {"name", "chassis", "upright", "static_camber_deg", "static_toe_deg", "rocker"}
     return Hardpoints(
         name=raw.get("name", Path(path).stem),
         chassis=read_group("chassis", CHASSIS_POINTS),
-        upright=read_group("upright", UPRIGHT_POINTS),
+        upright=upright,
         static_camber_deg=float(raw.get("static_camber_deg", 0.0)),
         static_toe_deg=float(raw.get("static_toe_deg", 0.0)),
         extra={k: v for k, v in raw.items() if k not in known},
+        rocker=rocker,
+    )
+
+
+def parse_rocker(block: dict, source: str = "JSON") -> RockerGeometry:
+    """Read the ``"rocker"`` block of a hardpoints file.
+
+    Format::
+
+        "rocker": {
+          "pushrod_mount": "lower_arm",       # or "upper_arm" (pullrod), "upright"
+          "axis": [1.0, 0.0, 0.0],            # rocker pivot axis direction
+          "PRO": [...], "PRI": [...], "RKP": [...], "SHR": [...]
+        }
+
+    Keys starting with ``_`` are comments and are kept when saving.
+    """
+    missing = [n for n in ROCKER_POINTS + ("axis",) if n not in block]
+    if missing:
+        raise ValueError(f"{source}: 'rocker' is missing {missing}")
+    return RockerGeometry(
+        mount=block.get("pushrod_mount", "lower_arm"),
+        axis=np.asarray(block["axis"], dtype=float),
+        points={n: np.asarray(block[n], dtype=float) for n in ROCKER_POINTS},
+        notes={k: v for k, v in block.items() if k.startswith("_")},
     )
 
 
@@ -99,6 +157,14 @@ def save_hardpoints(hp: Hardpoints, path: str | Path) -> None:
         "chassis": {k: [round(float(c), 4) for c in v] for k, v in hp.chassis.items()},
         "upright": {k: [round(float(c), 4) for c in v] for k, v in hp.upright.items()},
     }
+    if hp.rocker is not None:
+        r = hp.rocker
+        out["rocker"] = {
+            **r.notes,
+            "pushrod_mount": r.mount,
+            "axis": [round(float(c), 6) for c in r.axis],
+            **{k: [round(float(c), 4) for c in v] for k, v in r.points.items()},
+        }
     Path(path).write_text(dumps_compact(out) + "\n")
 
 

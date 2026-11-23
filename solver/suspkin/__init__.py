@@ -7,20 +7,27 @@ Typical use::
     poses = sk.bump_sweep(hp, travel_mm=50, step_mm=1)
     metrics = sk.compute_metrics(poses)
     sk.plot_sweep(metrics, "sweep.png")
+
+    steer = sk.steering_metrics(sk.steer_sweep(hp, rack_mm=25))   # Ackermann
 """
 
-from .export import write_metrics_csv, write_poses_json
+from .export import write_metrics_csv, write_metrics_table, write_poses_json
 from .hardpoints import Hardpoints, load_hardpoints, save_hardpoints
-from .kinematics import DoubleWishbone, Pose, bump_sweep
+from .kinematics import DoubleWishbone, Pose, bump_sweep, steer_sweep
 from .metrics import compute_metrics, summary
 from .optimize import OptimizeConfig, optimize
 from .packaging import check_packaging
-from .plotting import plot_comparison, plot_front_view, plot_sweep
+from .plotting import plot_comparison, plot_front_view, plot_steering, plot_sweep
+from .rocker import RockerGeometry, rocker_checks
+from .sideview import VehicleParams
+from .steering import steering_metrics, steering_summary
 
 __all__ = [
-    "DoubleWishbone", "Hardpoints", "OptimizeConfig", "Pose", "bump_sweep",
-    "check_packaging", "compute_metrics", "load_hardpoints", "optimize",
-    "plot_comparison", "plot_front_view", "plot_sweep", "save_hardpoints",
-    "summary", "write_metrics_csv", "write_poses_json",
+    "DoubleWishbone", "Hardpoints", "OptimizeConfig", "Pose", "RockerGeometry",
+    "VehicleParams", "bump_sweep", "check_packaging", "compute_metrics",
+    "load_hardpoints", "optimize", "plot_comparison", "plot_front_view",
+    "plot_steering", "plot_sweep", "rocker_checks", "save_hardpoints",
+    "steer_sweep", "steering_metrics", "steering_summary", "summary",
+    "write_metrics_csv", "write_metrics_table", "write_poses_json",
 ]
-__version__ = "0.2.0"
+__version__ = "0.3.0"

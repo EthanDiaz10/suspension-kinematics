@@ -10,21 +10,16 @@
     "rim_half_width_mm": 89.0,
     "radial_clearance_mm": 8.0,
     "hub_face_axial_mm": -20.0,
-    "checked_points": ["UBJ", "LBJ", "RTO", "SHU"]
+    "checked_points": ["UBJ", "LBJ", "RTO"]
   },
-  "point_descriptions": {
-    "UAF": "Upper A-arm, front chassis pivot",
-    "UAA": "Upper A-arm, aft chassis pivot",
-    "LAF": "Lower A-arm, front chassis pivot",
-    "LAA": "Lower A-arm, aft chassis pivot",
-    "RTI": "Tie rod inner end (steering rack)",
-    "SHC": "Spring/damper chassis end (direct-acting placeholder until the pushrod/rocker stage)",
-    "UBJ": "Upper ball joint",
-    "LBJ": "Lower ball joint",
-    "RTO": "Tie rod outer end (steering arm on the upright)",
-    "SHU": "Spring/damper upright end (direct-acting placeholder)",
-    "WC": "Wheel center",
-    "CP": "Tire contact patch center"
+  "vehicle": {
+    "_note": "Whole-car numbers for anti-dive / anti-squat and Ackermann (see solver/suspkin/sideview.py). Made-up FSAE-sized values.",
+    "axle": "front",
+    "wheelbase_mm": 1550.0,
+    "cg_height_mm": 290.0,
+    "front_brake_bias": 0.65,
+    "brakes": "outboard",
+    "driven": false
   },
   "static_camber_deg": -1.0,
   "static_toe_deg": 0.0,
@@ -34,14 +29,39 @@
     "LAF": [130.0, 195.003, 119.6114],
     "LAA": [-130.0, 195.003, 114.6114],
     "RTI": [65.0, 195.0047, 122.9352],
-    "SHC": [0.0, 300.0, 470.0]
+    "SHC": [5.0, 34.6, 474.2]
   },
   "upright": {
     "UBJ": [-8.0, 555.0, 335.7599],
     "LBJ": [5.0, 575.0, 142.5353],
     "RTO": [68.0, 565.0, 150.0],
-    "SHU": [0.0, 545.0, 145.0],
     "WC": [0.0, 610.0, 228.0],
     "CP": [0.0, 610.0, 0.0]
+  },
+  "rocker": {
+    "_note": "Pushrod and rocker (bellcrank). The rocker spins about 'axis' through RKP. See solver/suspkin/rocker.py.",
+    "pushrod_mount": "lower_arm",
+    "axis": [1.0, 0.0, 0.0],
+    "PRO": [5.0, 540.0, 154.54],
+    "PRI": [5.0, 262.5, 453.0],
+    "RKP": [5.0, 225.0, 420.0],
+    "SHR": [5.0, 234.6, 474.2]
+  },
+  "point_descriptions": {
+    "UAF": "Upper A-arm, front chassis pivot",
+    "UAA": "Upper A-arm, aft chassis pivot",
+    "LAF": "Lower A-arm, front chassis pivot",
+    "LAA": "Lower A-arm, aft chassis pivot",
+    "RTI": "Tie rod inner end (steering rack)",
+    "SHC": "Damper chassis end",
+    "UBJ": "Upper ball joint",
+    "LBJ": "Lower ball joint",
+    "RTO": "Tie rod outer end (steering arm on the upright)",
+    "WC": "Wheel center",
+    "CP": "Tire contact patch center",
+    "PRO": "Pushrod outer end (bracket on the lower A-arm)",
+    "PRI": "Pushrod inner end (on the rocker)",
+    "RKP": "Rocker pivot (on its rotation axis, on the chassis)",
+    "SHR": "Damper end on the rocker"
   }
 }

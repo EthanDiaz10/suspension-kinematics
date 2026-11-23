@@ -64,6 +64,8 @@ def check_packaging(hp: Hardpoints) -> list[PointClearance]:
     r_max = cfg["rim_inner_radius_mm"] - cfg["radial_clearance_mm"]
     results = []
     for name in cfg["checked_points"]:
+        if name not in hp.upright:
+            continue  # e.g. SHU on a pushrod/rocker design: nothing to check
         v = hp.upright[name] - wc
         axial = float(v @ axis)
         radial = float(np.linalg.norm(v - axial * axis))
