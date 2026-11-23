@@ -1,8 +1,10 @@
 # suspension-kinematics
 
-A parametric **double-wishbone suspension kinematics solver** in Python, built
-for FSAE-style design work, with an Autodesk Fusion script (planned) that draws
-the result in CAD.
+A personal simulation, analysis and design project: a parametric
+**double-wishbone suspension kinematics solver** in Python, with an Autodesk
+Fusion script (planned) that draws the result in CAD. The reference geometry
+uses Formula SAE-sized dimensions because they are well documented and
+realistic for a small open-wheel car.
 
 Change a hardpoint in a JSON file, re-run one command, and get camber, toe,
 caster, KPI, scrub, roll centre and motion ratio over the full wheel travel,
@@ -82,7 +84,7 @@ each can change without breaking the other.
 | `SHC` | spring/damper chassis end | `SHU` | spring/damper upright end |
 | | | `WC` / `CP` | wheel centre / contact patch |
 
-The baseline numbers are plausible FSAE values, not a validated car. The tie
+The baseline is a made-up but realistic FSAE-sized front corner, not a real car. The tie
 rod inner point was placed with a quick grid search so bump steer is close to
 zero, which is a preview of what Phase 2 automates.
 
