@@ -388,6 +388,12 @@ def build_assembly(front: Hardpoints, rear: Hardpoints, cfg: dict, parts_cfg: Pa
             "static_camber_deg": hp.static_camber_deg,
         }
     wb = -axle_offset(rear, "rear")[0]
+    frame = None
+    if "frame" in cfg:
+        from .frame import frame_group, frame_stats   # imported here: frame.py uses this module
+        group = frame_group(front, rear, cfg, wb)
+        groups.append(group)
+        frame = {k: round(float(v), 2) for k, v in frame_stats(group, cfg).items()}
     n_bodies = sum(len(c["bodies"]) for g in groups for c in g["components"])
     return {
         "name": "FSAE-style car: suspension assembly",
@@ -397,6 +403,7 @@ def build_assembly(front: Hardpoints, rear: Hardpoints, cfg: dict, parts_cfg: Pa
         "wheelbase_mm": wb,
         "axles": summary,
         "body_count": n_bodies,
+        "frame": frame,
         "groups": groups,
     }
 

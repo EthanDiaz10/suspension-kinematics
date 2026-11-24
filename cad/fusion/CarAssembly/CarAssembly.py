@@ -6,7 +6,8 @@ What it does, in order:
    file is in the usual place in the repo it is used straight away; otherwise
    it asks for it.
 2. Opens a new Fusion design and makes one component per group (front left
-   corner, front right corner, front anti-roll bar, steering rack, rear ...),
+   corner, front right corner, front anti-roll bar, steering rack, rear ...,
+   chassis frame),
    with a component inside it for every part (upper A-arm, upright, rocker,
    damper, wheel, ...).
 3. Builds each part's bodies from the simple solids in the file (cylinders,
@@ -387,6 +388,10 @@ def run(context):
         lines += ["", "Wheelbase {:.0f} mm, front track {:.0f} mm, rear track {:.0f} mm".format(
             raw.get("wheelbase_mm", 0), raw["axles"]["front"]["track_mm"], raw["axles"]["rear"]["track_mm"])
             if "axles" in raw else ""]
+        if raw.get("frame"):
+            f = raw["frame"]
+            lines.append("Space frame: {:.0f} tubes, {:.1f} m, about {:.1f} kg".format(
+                f["tubes"], f["length_m"], f["mass_kg"]))
         lines += ["Took {:.0f} s".format(secs), "", "STEP: " + (step or "not exported")]
         if notes:
             lines += [""] + notes

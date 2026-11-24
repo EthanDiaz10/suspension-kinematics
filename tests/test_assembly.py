@@ -45,7 +45,7 @@ def bodies(comp):
 def test_every_group_is_there(asm):
     assert set(groups(asm)) == {
         "Front left corner", "Front right corner", "Front anti-roll bar", "Steering rack",
-        "Rear left corner", "Rear right corner", "Rear anti-roll bar"}
+        "Rear left corner", "Rear right corner", "Rear anti-roll bar", "Chassis frame"}
     names = {c["name"] for c in groups(asm)["Rear left corner"]["components"]}
     assert {"Upper A-arm", "Lower A-arm", "Toe link", "Upright", "Pushrod", "Pushrod bracket",
             "Rocker", "Damper", "ARB drop link", "Wheel"} == names
@@ -143,8 +143,9 @@ def test_cli_writes_the_assembly(tmp_path, capsys):
     main(["assembly", str(FRONT), str(REAR), "--config", str(CONFIG), "--parts", str(PARTS),
           "--out", str(tmp_path)])
     raw = json.loads((tmp_path / "car_assembly.json").read_text())
-    assert len(raw["groups"]) == 7
-    assert "Rear anti-roll bar" in capsys.readouterr().out
+    assert len(raw["groups"]) == 8
+    out = capsys.readouterr().out
+    assert "Rear anti-roll bar" in out and "Space frame:" in out and "No frame tube comes within" in out
 
 
 # --- the Fusion script, with Fusion's API replaced by mocks -----------------
@@ -225,3 +226,49 @@ def test_fusion_script_rejects_a_wrong_file(monkeypatch, tmp_path):
     script.run(None)
     message = adsk.core.Application.get.return_value.userInterface.messageBox.call_args[0][0]
     assert "suspkin assembly" in message
+
+
+# --- Phase 10 step 2: the space frame -----------------------------------------
+
+def test_frame_clears_every_suspension_part(asm):
+    from suspkin.frame import frame_clearances
+    assert frame_clearances(asm, near_mm=3.0) == []
+
+
+def test_frame_is_symmetric_and_sensible(asm):
+    frame = groups(asm)["Chassis frame"]
+    tubes = bodies(frame["components"][0])
+    for name, b in tubes.items():
+        if name.endswith("(left)"):
+            right = tubes[name.replace("(left)", "(right)")]
+            assert [mirror_solid(s) for s in b["solids"]] == right["solids"]
+    f = asm["frame"]
+    assert 20 < f["mass_kg"] < 45          # FSAE steel frames are roughly 25-40 kg
+    lo, hi = group_bounds(frame)
+    assert lo[2] > 50                      # ground clearance under the lowest tube centre
+    assert hi[2] > 1000                    # the main hoop is above a seated driver's helmet
+
+
+def test_every_wishbone_pickup_has_a_tab_to_a_frame_node(asm, hps):
+    from suspkin.frame import frame_nodes
+    front, rear = hps
+    cfg = load_config(CONFIG)
+    nodes = frame_nodes(front, rear, cfg["frame"], asm["wheelbase_mm"])
+    tabs = bodies(groups(asm)["Chassis frame"]["components"][1])
+    for prefix, hp, off in (("F", front, 0.0), ("R", rear, -asm["wheelbase_mm"])):
+        axle = "Front" if prefix == "F" else "Rear"
+        for k in ("UAF", "UAA", "LAF", "LAA"):
+            tab = tabs[f"{axle} {k} pickup tab (left)"]["solids"][0]
+            pickup = hp.chassis[k] + [off, 0, 0]
+            # the tab's long axis runs from the node to the pickup
+            d = pickup - nodes[f"{prefix}_{k}"]
+            assert np.cross(tab["length_dir"], d / np.linalg.norm(d)) == pytest.approx(0, abs=1e-4)
+            assert nodes[f"{prefix}_{k}"][1] < pickup[1]       # node is inboard of the pickup
+
+
+def test_segment_distance():
+    from suspkin.frame import _segment_distance
+    a = np.array
+    assert _segment_distance(a([0, 0, 0.]), a([1, 0, 0.]), a([0, 1, 1.]), a([1, 1, 1.])) == pytest.approx(2 ** 0.5)
+    assert _segment_distance(a([0, 0, 0.]), a([2, 0, 0.]), a([1, -1, 0.]), a([1, 1, 0.])) == pytest.approx(0)
+    assert _segment_distance(a([0, 0, 0.]), a([1, 0, 0.]), a([3, 0, 0.]), a([4, 0, 0.])) == pytest.approx(2)

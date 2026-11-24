@@ -809,29 +809,47 @@ learned, is in [`docs/phase9-ansys-results.md`](docs/phase9-ansys-results.md).
 
 ## The whole car in Fusion (Phase 10)
 
-<p align="center"><img src="docs/images/car_assembly_preview.png" width="720" alt="Preview of the whole-car suspension assembly"></p>
+<p align="center"><img src="docs/images/car_assembly_preview.png" width="720" alt="Preview of the whole car: space frame and suspension"></p>
 
-`suspkin assembly` puts every part of the car's suspension into one file,
-and the Fusion script `cad/fusion/CarAssembly` builds it in one go: all four
-corners (A-arms with rod ends and clevises, tie rods and toe links, pushrods,
-the Phase 9 uprights, rockers and pushrod brackets, dampers with springs,
-drop links), both anti-roll bars, the steering rack, and 10 inch wheels and
-tyres. The right side is the left side mirrored and the rear corners sit one
-wheelbase back, exactly as the solver sees them.
+`suspkin assembly` puts every part of the car into one file, and the Fusion
+script `cad/fusion/CarAssembly` builds it in one go:
+
+* **All four corners:** A-arms with rod ends and clevises, tie rods and toe
+  links, pushrods, the Phase 9 uprights, rockers and pushrod brackets,
+  dampers with springs, anti-roll bar drop links, 10 inch wheels and tyres.
+  The right side is the left side mirrored and the rear corners sit one
+  wheelbase back, exactly as the solver sees them.
+* **Both anti-roll bars** and the **steering rack**.
+* **An FSAE-style space frame** (126 tubes, about 40 m and 34 kg of 4130):
+  front bulkhead, front and main hoops with braces, side impact tubes, and a
+  front and rear suspension box. Every wishbone pickup sits on a short tab
+  next to a frame node, so the arm loads go into the tubes along their length
+  instead of bending one. The rockers and dampers hang off a cross tube with a
+  strut down to the upper rail; tabs carry the rocker pivots, damper ends,
+  anti-roll bar bearings, rear toe links and the rack.
 
 ```powershell
 suspkin assembly data\optimized_front.json data\optimized_rear.json   # writes results\car_assembly.json
 ```
 
+The command also runs a **clearance check**: it reports any frame tube that
+comes within 3 mm of a suspension part (tubes, rod ends, damper, spring,
+rack, anti-roll bar), treating each as round. For the current design nothing
+does; the closest are the spring perches, about 5 mm from the rocker cross
+tubes. That's at ride height only; checking full bump and droop is on the
+roadmap.
+
 Then run **CarAssembly** in Fusion (install it like the other scripts: see
 [`cad/fusion/README.md`](cad/fusion/README.md)). It finds
-`results\car_assembly.json` by itself, builds about 150 bodies in nested
-components (one per corner, one per part), sets materials and appearances
-for rendering, and saves `results\car_assembly.step`.
+`results\car_assembly.json` by itself, builds the bodies in nested
+components (one per corner and part, plus the frame), sets materials and
+appearances for rendering, and saves `results\car_assembly.step`.
 
-Sizes of the stand-in parts (tube sizes, rod ends, damper, wheels) are in
-`data/assembly.json`. The picture above is a quick preview drawn from the same
-file, not a Fusion render.
+Sizes of the stand-in parts (tube sizes, rod ends, damper, wheels) and the
+frame's layout (hoop positions and heights, tube sizes, tab offsets) are in
+`data/assembly.json`. The frame is a packaging and visual model, not a
+rules-checked or stress-checked chassis. The picture above is a quick preview
+drawn from the same file, not a Fusion render.
 
 ## Working on more than one PC
 
@@ -881,7 +899,8 @@ Tips:
 - [x] **Phase 9:** rocker, damper and anti-roll bar forces; upright, rocker and pushrod bracket designed around the hardpoints; hand calcs, STEP export, built-in FE check with mesh convergence; Fusion parts script; Ansys Student guide
 - [ ] Joint loads at full bump instead of ride height
 - [ ] Topology optimisation / pocketing of the upright to save weight
-- [ ] **Phase 10:** full-car Fusion assembly (done: `suspkin assembly` + `CarAssembly`), FSAE-style space frame, renders and a design report
+- [ ] **Phase 10:** full-car Fusion assembly (done: `suspkin assembly` + `CarAssembly`, FSAE-style space frame, clearance check), renders and a design report
+- [ ] Frame clearance check at full bump, droop and steering lock
 
 ## License
 

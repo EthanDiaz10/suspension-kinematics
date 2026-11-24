@@ -457,6 +457,19 @@ def run_assembly(args) -> None:
         n = sum(len(c["bodies"]) for c in g["components"])
         print(f"  {g['name']:24s} {len(g['components']):2d} parts {n:3d} bodies   "
               f"x {lo[0]:6.0f} to {hi[0]:6.0f}   y {lo[1]:5.0f} to {hi[1]:5.0f}")
+    if asm.get("frame"):
+        from .frame import frame_clearances
+        f = asm["frame"]
+        print(f"\nSpace frame: {f['tubes']:.0f} tubes, {f['length_m']:.1f} m of tube, "
+              f"about {f['mass_kg']:.1f} kg of 4130 (tubes only, no tabs or welds)")
+        close = frame_clearances(asm, near_mm=3.0)
+        if close:
+            print(f"Frame tubes within 3 mm of a suspension part ({len(close)}):")
+            for c in close[:12]:
+                flag = "CLASH" if c["gap_mm"] < 0 else "tight"
+                print(f"  {c['gap_mm']:6.1f} mm  {flag:5s}  {c['tube']}  <->  {c['part']}")
+        else:
+            print("No frame tube comes within 3 mm of a suspension part (at ride height).")
     print(f"\n{asm['body_count']} bodies -> {path.resolve()}")
     print("Next: run the CarAssembly script in Fusion (cad/fusion/README.md).")
 

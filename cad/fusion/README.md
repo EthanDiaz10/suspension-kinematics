@@ -150,6 +150,7 @@ What you get:
 | Front left / Front right / Rear left / Rear right corner | Upper A-arm, Lower A-arm, Tie rod or Toe link, Upright, Pushrod, Pushrod bracket, Rocker, Damper, ARB drop link, Wheel |
 | Front anti-roll bar, Rear anti-roll bar | Torsion bar, two blade arms, two bearing blocks |
 | Steering rack | Housing, rack rod, pinion housing |
+| Chassis frame | Frame tubes (126 tubes plus a ball at each node), Suspension mounting tabs |
 
 Plus `results\car_assembly.step` with everything in it.
 
