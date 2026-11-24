@@ -186,19 +186,35 @@ def _fillet_junctions(vol: int, part: Part, radius: float) -> tuple[int, list[st
         else:
             notes.append(f"{cyl.name}: couldn't fillet (left sharp)")
     # Then inside corners between flat faces (arm meeting arm, arm meeting its
-    # root block), all at once. One at a time is tempting, but a fillet the
-    # kernel half-manages can leave a broken solid, so if the set fails they
-    # stay sharp (and the notes say so).
+    # root block). First find which ones the kernel can round on their own
+    # (trial fillets, thrown away), then round all of those in one go.
     edges = _concave_plane_edges(vol)
-    if edges:
+    good = []
+    for c in edges:
         try:
-            out = occ.fillet([vol], edges, [radius], removeVolume=False)
-            occ.remove([(3, vol)], recursive=True)
-            occ.synchronize()
-            vol = out[0][1]
+            trial = occ.fillet([vol], [c], [radius / 2], removeVolume=False)
+            occ.remove(trial, recursive=True)
+            good.append(c)
         except Exception:
-            occ.synchronize()
-            notes.append(f"{len(edges)} flat inside corner(s) couldn't be filleted (left sharp)")
+            pass
+        occ.synchronize()
+    if good:
+        for r in (radius, 0.5 * radius):
+            try:
+                out = occ.fillet([vol], good, [r], removeVolume=False)
+                occ.remove([(3, vol)], recursive=True)
+                occ.synchronize()
+                vol = out[0][1]
+                if r < radius:
+                    notes.append(f"flat inside corners: fillet reduced to {r:g} mm")
+                break
+            except Exception:
+                occ.synchronize()
+        else:
+            good = []
+    if len(good) < len(edges):
+        notes.append(f"{len(edges) - len(good)} flat inside corner(s) left sharp "
+                     f"(the CAD kernel couldn't round them)")
     return vol, notes
 
 

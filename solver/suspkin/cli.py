@@ -523,7 +523,7 @@ def run_parts(args) -> None:
                              *[f"{x:.1f}" for x in r.where_away]])
             worst = max(res, key=lambda r: r.max_vm_away_mpa)
             panels.setdefault(axle, []).append((part.name, worst, mat["yield_mpa"]))
-            views.setdefault(axle, []).append({"upright": (18, -60), "rocker": (10, -15)}.get(key, (15, -35)))
+            views.setdefault(axle, []).append({"upright": (22, -130), "rocker": (10, -15)}.get(key, (15, -35)))
             print(f"  worst: {worst.case}, {worst.n_elements} elements; peak at "
                   f"({', '.join(f'{x:.0f}' for x in worst.where_away)}) mm")
             if args.converge:

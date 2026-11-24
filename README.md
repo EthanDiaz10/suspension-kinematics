@@ -710,8 +710,6 @@ was 0.82). The upright now clears the rim by 1.5 mm.
 
 ### 3. The parts
 
-![Parts](docs/images/parts.png)
-
 Each part is built straight from the hardpoints out of simple cylinders and
 boxes (`solver/suspkin/parts.py`), with sizes in
 [`data/parts.json`](data/parts.json). Change a hardpoint or a size and every
@@ -731,7 +729,43 @@ torque goes through the **caliper lugs**. `suspkin parts` works out the lug
 forces (bolt-group method), and a test checks that their moment about the axle
 equals the tyre's.
 
-RESULTS_TABLE_PLACEHOLDER
+### 4. Results: three methods side by side
+
+Worst load case per part. "Quick FE" is `suspkin parts --fea` (quadratic tets,
+3 mm elements, arm-to-housing corners filleted); "converged" means a finer
+mesh (2.1 mm) changed the peak by less than 5%. The pass mark is a safety
+factor of 2 on yield (7075-T6: 503 MPa, 4130: 435 MPa).
+
+| Part (mass) | Worst case | Hand calc, worst arm root | Quick FE peak | Safety factor | Mesh convergence |
+|---|---|---|---|---|---|
+| Front upright (508 g) | Braking while cornering (outside) | 136 MPa (steering arm) | 180 to 213 MPa | 2.4 to 2.8 | Not settled: the peak sits on a 2 mm fillet at the lower ball joint arm's root, too small for a 2 to 3 mm mesh. The Ansys study refines it locally (guide section 3.4) |
+| Rear upright (517 g) | Acceleration | 89 MPa (toe link arm) | 95 MPa | 5.3 | Converged (0%) |
+| Front rocker (106 g) | 3 g bump | 106 MPa (damper arm) | 145 MPa | 3.5 | Converged (0.5%) |
+| Rear rocker (106 g) | 3 g bump | 122 MPa (damper arm) | 167 MPa | 3.0 | Converged (0.5%) |
+| Front pushrod bracket (25 g, 4130) | 3 g bump | 94 MPa (tab at weld) | 77 MPa | 5.6 | Converged (4%) |
+| Rear pushrod bracket (25 g, 4130) | 3 g bump | 124 MPa (tab at weld) | 99 MPa | 4.4 | Converged (3%) |
+
+Every part passes. The FE peaks run 1.1 to 1.6 times the hand calcs on the
+aluminium parts, which is the stress concentration at the arm roots and
+holes that a beam formula can't see. On the brackets the FE comes out lower,
+because the hand calc puts all of the bending in the thinnest direction.
+
+The front upright is the part to watch, as expected: it takes the biggest
+loads (4.4 kN at the lower ball joint while braking and cornering), and it
+deflects 0.4 mm at the lower ball joint. The rear moves 0.2 mm, the rockers
+under 0.1 mm. The first version of the upright failed the quick FE (1,300 MPa
+at a thin lower ball joint boss), and fixing that is what grew the boss to
+36 mm and added the wider arm roots. Two cheap next steps: pocket the
+upright's arms (it's heavy at about 510 g; 350 to 450 g is typical), and
+check the steering arm's stiffness, since its 0.4 mm movement turns into
+toe change.
+
+![Stress in the front parts](docs/images/parts.png)
+
+Ansys Student is the final word: section 3 of the guide sets up the same
+supports and loads (fixed bearing bore, a Remote Force on each joint hole,
+caliper forces under braking), with Fusion fillets and a mesh convergence
+table, then compares all three methods.
 
 ### Files it writes (in `results/`)
 

@@ -61,7 +61,9 @@ suspkin loads data\optimized_front.json data\optimized_rear.json
 suspkin parts data\optimized_front.json data\optimized_rear.json --step --fea
 ```
 
-The second command takes a few minutes. It prints:
+The second command takes **20 to 40 minutes** on a laptop (the two uprights
+are most of it; leave it running). If you only want the parts and the hand
+calcs, leave off `--step --fea` and it finishes in seconds. It prints:
 
 * **Rim clearance** of the upright: it should say `ok`.
 * **Hand calculations**: one line per check, all `ok`.
@@ -79,8 +81,9 @@ Everything is written to the `results\` folder:
 | `parts_fea.csv` | Quick FEA results |
 | `optimized_front+optimized_rear_rocker_loads.csv` | Damper, ARB drop link and rocker pivot forces (from `suspkin loads`) |
 
-Optional, a few minutes per part: add `--converge` to re-solve each part's
-worst case on three meshes. See section 3.6 for why that matters.
+Optional: add `--converge` to re-solve each part's worst case on three
+meshes (section 3.6 explains why). It roughly doubles the time, so you can
+limit it to some parts, for example `--only front_rocker rear_rocker`.
 
 > Open the CSV files in Excel (double-click). To see the upright's worst case,
 > filter the `case` column to `braking_cornering (outside)`.
