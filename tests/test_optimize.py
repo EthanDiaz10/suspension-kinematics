@@ -85,7 +85,7 @@ def test_committed_optimised_geometry_is_better_and_fits(hp):
     before, after = measure(hp), measure(opt)
     assert abs(after["rc_migration"]) < 0.2 * abs(before["rc_migration"])
     assert after["bump_steer"] < 0.05
-    assert after["bj_spread"] > 190  # ball joints didn't collapse together
+    assert after["bj_spread"] > 185  # ball joints didn't collapse together (187 after Phase 9 lowered the UBJ 6 mm for the rim)
     assert after["kpi"] < 6.2
     assert all(c.ok for c in check_packaging(opt))
     from suspkin.optimize import score

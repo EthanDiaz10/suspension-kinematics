@@ -1,6 +1,6 @@
 {
   "name": "Optimised FSAE-style front corner (front-left)",
-  "description": "Phase 6: front anti-roll bar added (6.5 N m/deg), static camber set to -1.6 deg so the outside tyre is at about -1 deg at 1.5 g, and the upper ball joint lowered 2 mm to keep it inside the rim at the new camber. Earlier: output of `suspkin optimize data/baseline_fsae_front.json data/optimize_front.json`, then hand-tuned in Phase 4: lower-arm front pivot 5 mm down and rear pivot 5 mm up (anti-dive -1% -> 22%), outer tie-rod end 20 mm outboard (Ackermann -16% -> +17%), and the rack moved 0.6 mm out / 0.7 mm down to cancel the extra bump steer. Inside the 10 inch rim envelope.",
+  "description": "Phase 9: upper ball joint lowered 6 mm so a real spherical bearing housing (13 mm radius) fits inside the 10 inch rim with 2 mm to spare (camber gain -0.43 -> -0.38 deg/10 mm, roll centre about 7 mm lower); static camber then set to -1.75 deg to keep the outside tyre at about -1 deg at 1.5 g, and the inner tie rod (toe link) end nudged about 1 mm to cancel the extra bump steer. Phase 6: front anti-roll bar added (6.5 N m/deg), static camber set to -1.6 deg so the outside tyre is at about -1 deg at 1.5 g, and the upper ball joint lowered 2 mm to keep it inside the rim at the new camber. Earlier: output of `suspkin optimize data/baseline_fsae_front.json data/optimize_front.json`, then hand-tuned in Phase 4: lower-arm front pivot 5 mm down and rear pivot 5 mm up (anti-dive -1% -> 22%), outer tie-rod end 20 mm outboard (Ackermann -16% -> +17%), and the rack moved 0.6 mm out / 0.7 mm down to cancel the extra bump steer. Inside the 10 inch rim envelope.",
   "units": "mm",
   "coordinate_system": "SAE/ISO vehicle axes: +X forward, +Y left, +Z up. Origin on the ground plane, on the car centerline, at the front axle line.",
   "side": "front-left",
@@ -24,8 +24,8 @@
     "mass_kg": 280.0,
     "front_weight_fraction": 0.47,
     "rear_track_mm": 1200.0,
-    "rear_roll_stiffness_nm_per_deg": 404.3,
-    "rear_rc_height_mm": 32.8,
+    "rear_roll_stiffness_nm_per_deg": 406.7,
+    "rear_rc_height_mm": 24.6,
     "design_lateral_g": 1.5,
     "target_outside_camber_deg": -1.0
   },
@@ -46,18 +46,18 @@
     "RKP": "Rocker pivot (on its rotation axis, on the chassis)",
     "SHR": "Damper end on the rocker"
   },
-  "static_camber_deg": -1.6,
+  "static_camber_deg": -1.75,
   "static_toe_deg": 0.0,
   "chassis": {
     "UAF": [110.0, 290.0, 281.3865],
     "UAA": [-120.0, 290.0, 271.3865],
     "LAF": [130.0, 195.003, 114.6114],
     "LAA": [-130.0, 195.003, 119.6114],
-    "RTI": [65.0, 195.6, 122.22],
+    "RTI": [65.0, 194.464, 122.375],
     "SHC": [5.0, 34.6, 474.2]
   },
   "upright": {
-    "UBJ": [-8.0, 555.0, 333.7599],
+    "UBJ": [-8.0, 555.0, 327.7599],
     "LBJ": [5.0, 575.0, 142.5353],
     "RTO": [68.0, 585.0, 150.0],
     "WC": [0.0, 610.0, 228.0],

@@ -1,0 +1,58 @@
+{
+  "_note": "Phase 9 part design: sizes for the upright, rocker and pushrod bracket. The parts are built around the hardpoints (see solver/suspkin/parts.py) from simple solids: cylinders for bosses and housings, boxes for the arms joining them. Change a number here and re-run `suspkin parts` to get new STEP files, hand calcs and FEA loads. Bearing and spherical-bearing sizes are typical catalogue sizes: check them against the parts you would actually buy.",
+  "required_safety_factor": 2.0,
+  "_fillet_note": "fillet_mm (per part): the STEP files and the quick FEA round the inside corners where arms meet the housing / bosses / pivot tube with this radius. Sharp inside corners have no converged stress (it keeps rising as the mesh gets finer). Do the same in Fusion before your own study.",
+  "_safety_factor_note": "Against yield, on the worst load case. Higher than the 1.5 used for the tubes because these are machined parts with holes and corners (stress raisers the hand calcs don't see) and aluminium has no fatigue limit. The FEA is the real check; the hand calcs size the parts first.",
+  "materials": {
+    "7075-T6": {"yield_mpa": 503.0, "ultimate_mpa": 572.0, "e_gpa": 71.7, "poisson": 0.33, "density_kg_m3": 2810.0,
+                "_note": "Aerospace aluminium plate/bar, the usual choice for FSAE uprights and rockers."},
+    "4130": {"yield_mpa": 435.0, "ultimate_mpa": 670.0, "e_gpa": 205.0, "poisson": 0.29, "density_kg_m3": 7850.0,
+             "_note": "Chromoly steel sheet for welded tabs (normalised; the weld zone is weaker)."}
+  },
+  "upright": {
+    "material": "7075-T6",
+    "fillet_mm": 4.0,
+    "bearing": {"name": "2 x 61908 thin-section ball bearing (40 x 62 x 12) with a 12 mm spacer",
+                "bore_mm": 62.0, "housing_wall_mm": 5.0, "housing_length_mm": 40.0,
+                "gap_to_hub_face_mm": 4.0},
+    "_bearing_note": "Housing sits on the wheel's spin axis, ending gap_to_hub_face_mm inboard of the hub face (the rim's hub_face_axial_mm in the hardpoints file).",
+    "ball_joints": {
+      "UBJ": {"name": "5/16 in spherical bearing (COM5T type), 19.05 OD x 11.1 wide", "bore_mm": 19.05, "width_mm": 16.0, "boss_od_mm": 26.0},
+      "LBJ": {"name": "3/8 in spherical bearing (COM6T type), 20.6 OD x 11.1 wide", "bore_mm": 20.64, "width_mm": 16.0, "boss_od_mm": 36.0}
+    },
+    "_ball_joint_note": "Pressed into the upright with the bearing axis fore-aft (X); the wishbone's clevis straddles it front and back, so nothing sticks out toward the rim. The boss is 16 mm long: the 11 mm bearing plus a shoulder on one side and a circlip groove on the other (not modelled).",
+    "steering_arm": {"bolt_mm": 8.0, "boss_od_mm": 20.0, "boss_height_mm": 12.0,
+                     "_note": "Rod end bolt (5/16 in) roughly vertical through the arm's end boss."},
+    "caliper": {"bolt_mm": 8.0, "boss_od_mm": 18.0, "bolt_radius_mm": 82.0, "bolt_spacing_mm": 64.0,
+                "position_deg": 180.0, "boss_length_mm": 14.0, "pad_radius_mm": 78.0,
+                "_note": "Axial-mount caliper lugs (bolts parallel to the axle). position_deg is where the caliper sits around the axle, seen from outboard: 0 = forward, 90 = up, 180 = behind. pad_radius_mm is the brake pad's effective radius on the disc."},
+    "arms": {
+      "UBJ": {"width_mm": 16.0, "depth_mm": 26.0, "root_width_mm": 30.0, "root_length_mm": 25.0},
+      "LBJ": {"width_mm": 16.0, "depth_mm": 36.0, "root_width_mm": 34.0, "root_length_mm": 20.0},
+      "RTO": {"width_mm": 14.0, "depth_mm": 16.0, "root_width_mm": 22.0, "root_length_mm": 25.0},
+      "caliper": {"width_mm": 22.0, "depth_mm": 14.0}
+    },
+    "_arms_note": "Each arm is a solid rectangular bar from the bearing housing to the centre of its boss. width = across the arm, roughly fore-aft; depth = roughly along the axle. Keep a ball joint arm's width equal to its boss length (so the clevis has room) and its depth equal to the boss diameter (so the arm wraps the top half of the boss); a narrower arm leaves the thin bearing wall carrying everything. root_width_mm / root_length_mm add a wider block where the arm meets the housing (a simple taper), since that's where the bending is highest."
+  },
+  "rocker": {
+    "material": "7075-T6",
+    "fillet_mm": 3.0,
+    "plate_thickness_mm": 6.0,
+    "plate_gap_mm": 14.0,
+    "_plates_note": "Two identical plates either side of the rod ends (double shear). plate_gap_mm is the inside gap, centred on the rocker's hardpoints.",
+    "pivot": {"name": "2 x 6201-2RS ball bearing (12 x 32 x 10)", "bore_mm": 32.0, "boss_od_mm": 42.0,
+              "bearing_width_mm": 10.0, "bearing_static_rating_n": 3100.0, "bolt_mm": 12.0,
+              "_note": "One bearing pressed into each end of the pivot tube. A 6001 (C0 2.36 kN) was too small for the 3 g bump on the rear (static SF 1.9)."},
+    "holes": {"bolt_mm": 8.0, "boss_od_mm": 22.0},
+    "arm_width_mm": 20.0
+  },
+  "pushrod_bracket": {
+    "material": "4130",
+    "tab_thickness_mm": 3.0,
+    "tab_gap_mm": 14.0,
+    "bolt_mm": 8.0,
+    "edge_distance_mm": 11.0,
+    "tab_height_below_hole_mm": 18.0,
+    "_note": "Two tabs welded to the lower wishbone near the ball joint, either side of the pushrod's rod end (double shear). tab_height_below_hole_mm is from the hole centre down to the weld on the wishbone."
+  }
+}

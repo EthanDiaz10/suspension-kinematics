@@ -61,8 +61,27 @@ Simplifications
 ---------------
 Loads are applied at the design (ride height) geometry, the tyre's
 self-aligning torque comes only from a fixed pneumatic trail, its overturning
-and rolling resistance moments are ignored, parts are rigid, and the
-rocker, damper and anti-roll bar loads aren't computed here.
+and rolling resistance moments are ignored and parts are rigid.
+
+Phase 9: the rocker, damper and anti-roll bar
+---------------------------------------------
+The pushrod force above is the *total* spring force at the wheel: springs plus
+anti-roll bar, because the bar's drop link hangs off the same rocker. The
+rocker can only spin about its pivot axis, so it gives ONE equation (moments
+about the axis add up to zero) for TWO unknowns, the damper force and the
+drop link force. The second equation comes from how the car moves:
+
+* **Heave** (both wheels of an axle loaded the same way, e.g. braking or a
+  bump): the bar doesn't twist, so it carries nothing. The damper (spring)
+  takes the whole pushrod moment.
+* **Roll** (one side up, the other down): spring and bar deflect together, so
+  they share the load in proportion to their roll stiffness. ``suspkin car``
+  gives both (``*_roll_stiffness_springs/bar_nm_per_deg``).
+
+A cornering case has an inside and an outside wheel, so its pushrod forces
+split into a heave part (the average of the two) and a roll part (half the
+difference). The heave part goes to the spring; the roll part is shared.
+See :func:`solve_rocker_loads`.
 """
 
 from __future__ import annotations
@@ -426,6 +445,7 @@ class LoadsConfig:
     ball_joint_rating_n: float = 25000.0
     catalogue: list[Tube] = field(default_factory=list)
     pneumatic_trail_mm: float = 0.0
+    rocker_bearing_spacing_mm: float = 40.0
 
     @classmethod
     def load(cls, path: str | Path) -> "LoadsConfig":
@@ -456,6 +476,7 @@ class LoadsConfig:
             ball_joint_rating_n=float(raw.get("ball_joint_rating_n", 25000.0)),
             catalogue=[Tube(float(od), float(w)) for od, w in raw.get("tube_catalogue", [])],
             pneumatic_trail_mm=float(raw.get("pneumatic_trail_mm", 0.0)),
+            rocker_bearing_spacing_mm=float(raw.get("rocker_bearing_spacing_mm", 40.0)),
         )
 
 
@@ -509,6 +530,9 @@ class LoadsResult:
     ball_joints: dict[str, tuple[float, str, float]]  # "front UBJ" -> (max N, case, SF)
     lightest: dict[str, tuple[Tube | None, float]]    # group -> (lightest passing tube, its SF)
     notes: list[str]
+    rockers: dict[str, list["RockerLoads"]] = field(default_factory=dict)  # axle -> per case
+    rocker_static: dict[str, "RockerLoads"] = field(default_factory=dict)   # axle -> ride height
+    bar_shares: dict[str, float] = field(default_factory=dict)             # axle -> bar roll share
 
 
 def _sf(capacity: float, load: float) -> float:
@@ -594,7 +618,23 @@ def analyse_loads(car: CarResult, cfg: LoadsConfig) -> LoadsResult:
         ideal = ideal_front_brake_bias(v, decel)
         notes.append(f"ideal front brake bias at {decel:g} g is {100 * ideal:.0f}% "
                      f"(the vehicle block has {100 * v.front_brake_bias:.0f}%)")
-    return LoadsResult(cfg, corners, checks, ball_joints, lightest, notes)
+    # Phase 9: rocker, damper and bar drop link (corners with a rocker only).
+    rockers, static, shares = {}, {}, {}
+    for axle, c in corners.items():
+        if c.hp.rocker is None:
+            continue
+        shares[axle] = bar_roll_share(car, axle)
+        rockers[axle] = rocker_loads_for_corner(c, shares[axle], cfg.rocker_bearing_spacing_mm)
+        static[axle] = static_rocker_loads(car, axle, cfg.rocker_bearing_spacing_mm)
+        spring = getattr(car.front if axle == "front" else car.rear, "vehicle").spring_rate_n_per_mm
+        i = int(np.argmin([r.damper_n for r in rockers[axle]]))
+        if spring > 0:
+            extra = (static[axle].damper_n - rockers[axle][i].damper_n) / spring
+            notes.append(f"{axle}: biggest damper push {-rockers[axle][i].damper_n:.0f} N in "
+                         f"{c.labels[i]}; on the {spring:g} N/mm spring alone that's {extra:.0f} mm "
+                         f"of damper travel past ride height (a bump stop takes it if the damper "
+                         f"runs out of stroke first)")
+    return LoadsResult(cfg, corners, checks, ball_joints, lightest, notes, rockers, static, shares)
 
 
 def upright_loads_dict(result: LoadsResult) -> dict:
@@ -624,4 +664,178 @@ def upright_loads_dict(result: LoadsResult) -> dict:
                 "link_forces_n_tension_positive": {k: round(v, 1) for k, v in f.members.items()},
             }
         out["corners"][axle] = {"name": c.hp.name, "upright_points_mm": pts, "cases": cases}
+        if axle in result.rockers:
+            out["corners"][axle]["rocker"] = rocker_loads_dict(result, axle)
     return out
+
+
+def rocker_loads_dict(result: LoadsResult, axle: str) -> dict:
+    """Forces ON the rocker per case, for its FEA (see ``RockerLoads``)."""
+    c = result.corners[axle]
+    hp = c.hp
+    pts = {**hp.rocker.points, "SHC": hp.chassis["SHC"]}
+    if hp.arb is not None:
+        pts.update(hp.arb.points)
+    r2 = lambda v: [round(float(x), 1) for x in v]  # noqa: E731
+    cases = {"static (ride height)": result.rocker_static[axle]}
+    cases.update({lab: r for lab, r in zip(c.labels, result.rockers[axle])})
+    return {
+        "_note": ("Forces ON the rocker (N) at PRI (pushrod), SHR (damper), ARL (bar drop link) and "
+                  "RKP (pivot reaction); they add up to zero. Damper / link / pushrod forces are "
+                  "+ in tension. The bar's share of the roll part of the load is bar_roll_share."),
+        "axis": [round(float(x), 4) for x in hp.rocker.axis],
+        "points_mm": {k: [round(float(x), 3) for x in v] for k, v in pts.items()},
+        "bar_roll_share": round(result.bar_shares[axle], 4),
+        "bearing_spacing_mm": result.config.rocker_bearing_spacing_mm,
+        "cases": {lab: {
+            "pushrod_n": round(r.pushrod_n, 1), "damper_n": round(r.damper_n, 1),
+            "arb_link_n": round(r.arb_link_n, 1), "bar_torque_nm": round(r.bar_torque_nm, 2),
+            "forces_on_rocker_n": {k: r2(v) for k, v in r.forces_on_rocker.items()},
+            "pivot_bearing_radial_n": [round(x, 1) for x in r.bearing_radial_n],
+            "pivot_axial_n": round(r.pivot_axial_n, 1),
+        } for lab, r in cases.items()},
+    }
+
+
+# ---------------------------------------------------------------------------
+# 5. Phase 9: rocker, damper, anti-roll bar drop link and rocker pivot
+# ---------------------------------------------------------------------------
+
+@dataclass
+class RockerLoads:
+    """Forces on one rocker in one load case (left corner's axes, N and N mm).
+
+    ``forces_on_rocker`` holds the force ON the rocker at each of its joints:
+    PRI (pushrod), SHR (damper), ARL (bar drop link, if it's on the rocker) and
+    RKP (the pivot's reaction, so all four add up to zero). Those are exactly
+    what an FEA of the rocker needs: fix the pivot bore, load the other holes,
+    or (better, it's a free body) apply all of them with inertia relief.
+    """
+
+    pushrod_n: float                     # + = tension (same as the link table)
+    damper_n: float                      # + = tension; a loaded spring is in compression
+    arb_link_n: float                    # + = tension
+    bar_roll_share: float                # bar's share of the ROLL part (0 if no bar on the rocker)
+    forces_on_rocker: dict[str, np.ndarray]
+    pivot_moment_nmm: np.ndarray         # moment the pivot resists, perpendicular to its axis
+    bearing_radial_n: tuple[float, float]  # the two pivot bearings, for a given spacing
+    pivot_axial_n: float                 # thrust along the pivot axis
+    bar_torque_nm: float                 # torque in the anti-roll bar (this side's arm)
+
+    @property
+    def pivot_force_n(self) -> float:
+        return float(np.linalg.norm(self.forces_on_rocker["RKP"]))
+
+
+def _moment_about_axis(point: np.ndarray, force_dir: np.ndarray, origin: np.ndarray,
+                       axis: np.ndarray) -> float:
+    """Moment about a fixed axis of a unit force at ``point`` (N mm per N)."""
+    return float(axis @ np.cross(point - origin, force_dir))
+
+
+def solve_rocker_loads(hp: Hardpoints, pushrod_heave_n: float, pushrod_roll_n: float,
+                       bar_roll_share: float, bearing_spacing_mm: float = 40.0) -> RockerLoads:
+    """Damper, drop link and pivot loads on the rocker (design position).
+
+    ``pushrod_heave_n + pushrod_roll_n`` is the pushrod force (+ = tension) in
+    this case; ``bar_roll_share`` is the bar's fraction of the axle's elastic
+    roll stiffness (0 = no bar). The rocker's moment balance about its axis::
+
+        M_pushrod + D m_damper + Q m_link = 0
+
+    with ``D`` taking the heave part plus ``(1 - share)`` of the roll part and
+    ``Q`` taking ``share`` of the roll part.
+
+    Then the pivot: it carries everything else. Its force is minus the sum of
+    the three joint forces, and the moment of those forces about RKP (the part
+    across the axis; the part along it is zero by construction) is split
+    between two bearings ``bearing_spacing_mm`` apart, one either side of RKP.
+    """
+    rk = hp.rocker
+    if rk is None:
+        raise ValueError("this corner has no rocker block")
+    a, rkp = rk.axis, rk.points["RKP"]
+    pts = rk.points
+    shc = hp.chassis["SHC"]
+    e_push = _unit(pts["PRI"] - pts["PRO"])   # pushrod tension pulls PRI toward PRO: -P e_push
+    e_damp = _unit(shc - pts["SHR"])          # damper tension pulls SHR toward SHC: +D e_damp
+
+    p_total = pushrod_heave_n + pushrod_roll_n
+    m_push = _moment_about_axis(pts["PRI"], -e_push, rkp, a)
+    m_damp = _moment_about_axis(pts["SHR"], e_damp, rkp, a)
+
+    bar_on_rocker = hp.arb is not None and hp.arb.link_mount == "rocker"
+    share = bar_roll_share if bar_on_rocker else 0.0
+    # Moment the spring and the bar must each supply (opposite to the pushrod's).
+    m_spring = -m_push * (pushrod_heave_n + (1.0 - share) * pushrod_roll_n)
+    m_bar = -m_push * share * pushrod_roll_n
+    damper = m_spring / m_damp
+
+    forces = {"PRI": -p_total * e_push, "SHR": damper * e_damp}
+    link, bar_torque = 0.0, 0.0
+    if bar_on_rocker:
+        arl, ara, arp = (hp.arb.points[k] for k in ("ARL", "ARA", "ARP"))
+        e_link = _unit(ara - arl)             # drop link tension pulls ARL toward ARA
+        m_link = _moment_about_axis(arl, e_link, rkp, a)
+        link = m_bar / m_link if abs(m_link) > 1e-9 else 0.0
+        forces["ARL"] = link * e_link
+        # The same link pulls ARA toward ARL: that's the torque twisting the bar.
+        bar_axis = np.array([0.0, 1.0, 0.0])
+        bar_torque = link * _moment_about_axis(ara, -e_link, arp, bar_axis) / 1000.0
+
+    total_f = sum(forces.values())
+    where = {**pts, **(hp.arb.points if hp.arb else {})}
+    total_m = sum(np.cross(where[k] - rkp, f) for k, f in forces.items())
+    forces["RKP"] = -total_f
+    m_perp = total_m - (total_m @ a) * a      # the pivot must resist -m_perp
+    # Bearings at RKP -/+ (s/2) a carry F1, F2 (across the axis):
+    #   F1 + F2 = -total_f(perp),   (s/2) a x (F2 - F1) = -m_perp
+    f_perp = -(total_f - (total_f @ a) * a)
+    diff = np.cross(-2.0 * m_perp / bearing_spacing_mm, a)  # F2 - F1
+    f1, f2 = (f_perp - diff) / 2.0, (f_perp + diff) / 2.0
+    return RockerLoads(p_total, float(damper), float(link), share, forces, -m_perp, (float(np.linalg.norm(f1)), float(np.linalg.norm(f2))),
+                       float(-(total_f @ a)), float(bar_torque))
+
+
+def bar_roll_share(car: CarResult, axle: str) -> float:
+    """The anti-roll bar's share of one axle's elastic roll stiffness (0-1)."""
+    n = car.numbers
+    k_s = n[f"{axle}_roll_stiffness_springs_nm_per_deg"]
+    k_b = n[f"{axle}_roll_stiffness_bar_nm_per_deg"]
+    return float(k_b / (k_s + k_b)) if k_s + k_b > 0 else 0.0
+
+
+def rocker_loads_for_corner(corner: "CornerResult", share: float,
+                            bearing_spacing_mm: float = 40.0) -> list[RockerLoads]:
+    """Rocker loads for every case of one corner (same order as ``corner.tyres``).
+
+    The inside and outside wheel of the same cornering case are the two wheels
+    of one axle in one turn (the right-hand one mirrored), so their pushrod
+    forces split into heave = average and roll = half the difference.
+    """
+    if corner.hp.rocker is None:
+        return []
+    by_case: dict[str, dict[str, float]] = {}
+    for t, f in zip(corner.tyres, corner.forces):
+        by_case.setdefault(t.case, {})[t.side] = f.members["pushrod"]
+    out = []
+    for t, f in zip(corner.tyres, corner.forces):
+        sides = by_case[t.case]
+        p = f.members["pushrod"]
+        if t.side in ("inside", "outside") and len(sides) == 2:
+            heave = (sides["inside"] + sides["outside"]) / 2.0
+        else:
+            heave = p
+        out.append(solve_rocker_loads(corner.hp, heave, p - heave, share, bearing_spacing_mm))
+    return out
+
+
+def static_rocker_loads(car: CarResult, axle: str, bearing_spacing_mm: float = 40.0) -> RockerLoads:
+    """Rocker loads with the car just sitting at ride height (1 g, no cornering)."""
+    hp = car.front.hp if axle == "front" else car.rear.hp
+    n = car.numbers
+    t = [t for t in tyre_loads(LoadCase("static"), car.car, n["front_load_transfer_n_per_g"],
+                               n["rear_load_transfer_n_per_g"], rear=car.rear.vehicle)
+         if t.axle == axle][0]
+    p = solve_link_forces(hp, t.applied(hp)).members["pushrod"]
+    return solve_rocker_loads(hp, p, 0.0, 0.0, bearing_spacing_mm)

@@ -13,6 +13,7 @@ dependencies = ["numpy>=1.24", "scipy>=1.10", "matplotlib>=3.7"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "jupyter"]
+fea = ["gmsh>=4.11", "scikit-fem>=9", "pyamg>=5"]
 
 [project.scripts]
 suspkin = "suspkin.cli:main"
