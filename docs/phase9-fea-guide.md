@@ -45,13 +45,14 @@ fatigue sooner.
 Open **PowerShell** and type these lines one at a time (press Enter after each):
 
 ```powershell
-cd ~\Documents\suspension-kinematics
+cd ~\Projects\suspension-kinematics
+git checkout main
 git pull
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev,fea]"
 ```
 
-`git pull` fetches Phase 9. The `pip` line adds the three FEA packages (gmsh,
+Use the folder where your copy of the repo lives. `git checkout main` makes sure you're on the main branch (an old feature branch won't get the new code), and `git pull` fetches Phase 9. The `pip` line adds the three FEA packages (gmsh,
 scikit-fem, pyamg). It only needs doing once.
 
 Now run the loads (they changed slightly in Phase 9) and then the parts:
@@ -97,7 +98,7 @@ limit it to some parts, for example `--only front_rocker rear_rocker`.
 1. In Fusion, press **Shift+S** (Utilities > Add-Ins > Scripts and Add-Ins).
 2. On the **Scripts** tab, click the green **+** (newer versions: **+ > Script
    or add-in from device**) and choose the folder
-   `Documents\suspension-kinematics\cad\fusion\SuspensionParts`.
+   `cad\fusion\SuspensionParts` inside your copy of the repo.
 
 ### 2.2 Build the parts
 
@@ -148,8 +149,10 @@ example, `front_upright_filleted.step`.
 The download is big, so give it time. When the installer asks, make sure
 **Mechanical** (Structural) is included.
 
-**The one limit that matters**: Ansys Student allows **128,000 nodes**
-(mesh points). A single part fits easily, as long as you mesh it as below.
+**The node limit**: older Ansys Student versions allowed **128,000 nodes**
+(mesh points). 2026 R1 solved a 905,000-node mesh of the upright without
+complaint, so the limit may be higher in your version. A single part fits
+easily either way, as long as you mesh it as below.
 
 We'll do the **front upright** in full. The rocker and the bracket follow the
 same steps, and their differences are listed in 3.8.
@@ -159,7 +162,7 @@ same steps, and their differences are listed in 3.8.
 1. Open **Ansys Workbench** (Start menu > Ansys 202x R2 > Workbench).
 2. From the **Toolbox** on the left, drag **Static Structural** into the
    big empty area (the Project Schematic). A block with numbered rows appears.
-3. **File > Save As**: `Documents\suspension-kinematics\results\ansys\phase9.wbpj`.
+3. **File > Save As**: `results\ansys\phase9.wbpj` inside your copy of the repo.
 
 ### 3.2 Add the material (7075-T6)
 
@@ -357,3 +360,6 @@ How to read it:
 | Ansys: "insufficient supports / rigid body motion" | The Fixed Support didn't stick to a face: click it and check **Geometry** says 1 Face (or more) |
 | The stress plot is all one colour | **Units** isn't mm: check 3.3 step 3, and that the forces are in N |
 | Fusion: fillet fails | Smaller radius, or fillet fewer edges at once |
+| Deformation about 10x the quick FEA, stress about the same | Young's modulus typo (7.17 instead of 71.7 GPa). Fix it in Engineering Data, **Refresh Project**, solve again |
+| Huge stress (thousands of MPa) after **Replace Geometry** | Ansys re-matched a support or force to the wrong face. Click each one and check what's highlighted; re-pick the bore and the holes. Also re-check the material |
+| The peak keeps rising every refinement | It's on a sharp edge (a singularity). Fillet it, or read the stress a couple of mm away with **Probe**. See [`phase9-ansys-results.md`](phase9-ansys-results.md) for a worked example |
