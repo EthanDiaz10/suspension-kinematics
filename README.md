@@ -14,6 +14,8 @@ centre, roll stiffness (springs and anti-roll bar) and roll per g as the body ro
 front and the rear corner, how the whole car shares its load transfer, and the force in every link under braking, cornering, bumps and acceleration, with tube and rod end safety factors, with no manual remodelling. Or let the optimiser move the hardpoints for you,
 toward targets you set, while keeping the joints inside a 10" rim.
 
+**The finished design, with every choice explained and checked, is in the [design report](docs/design-report.md).**
+
 ![Bump sweep of the baseline front corner](docs/images/bump_sweep.png)
 
 <p align="center"><img src="docs/images/front_view.png" width="520" alt="Front view at droop, static and bump"></p>
@@ -899,7 +901,7 @@ Tips:
 - [x] **Phase 9:** rocker, damper and anti-roll bar forces; upright, rocker and pushrod bracket designed around the hardpoints; hand calcs, STEP export, built-in FE check with mesh convergence; Fusion parts script; Ansys Student guide
 - [ ] Joint loads at full bump instead of ride height
 - [ ] Topology optimisation / pocketing of the upright to save weight
-- [ ] **Phase 10:** full-car Fusion assembly (done: `suspkin assembly` + `CarAssembly`, FSAE-style space frame, clearance check), renders and a design report
+- [ ] **Phase 10:** full-car Fusion assembly (done: `suspkin assembly` + `CarAssembly`, FSAE-style space frame, clearance check, [design report](docs/design-report.md)); renders to come
 - [ ] Frame clearance check at full bump, droop and steering lock
 
 ## License
