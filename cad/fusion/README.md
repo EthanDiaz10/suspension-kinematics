@@ -128,3 +128,45 @@ The parts are built from simple blocks and cylinders, so every inside corner
 is sharp: **add 3 to 4 mm fillets** where the arms meet the housing and the
 bosses before any stress study. The full workflow, including the Ansys
 Student study, is in [`docs/phase9-fea-guide.md`](../../docs/phase9-fea-guide.md).
+
+## Phase 10: the whole car (`CarAssembly/`)
+
+`CarAssembly/` builds the whole car's suspension in one design from the file
+that `suspkin assembly` writes:
+
+```powershell
+suspkin assembly data\optimized_front.json data\optimized_rear.json
+```
+
+Install it the same way as the others (green **+**, choose the
+`cad/fusion/CarAssembly` folder) and run it. It looks for
+`results\car_assembly.json` in the repo by itself and only asks for a file if
+it isn't there.
+
+What you get:
+
+| Component (top level) | Inside it |
+|---|---|
+| Front left / Front right / Rear left / Rear right corner | Upper A-arm, Lower A-arm, Tie rod or Toe link, Upright, Pushrod, Pushrod bracket, Rocker, Damper, ARB drop link, Wheel |
+| Front anti-roll bar, Rear anti-roll bar | Torsion bar, two blade arms, two bearing blocks |
+| Steering rack | Housing, rack rod, pinion housing |
+| Chassis frame | Frame tubes (126 tubes plus a ball at each node), Suspension mounting tabs |
+
+Plus `results\car_assembly.step` with everything in it.
+
+Things to know:
+
+* It makes a **direct** design (no timeline), because nothing in it is
+  parametric and it builds much faster. To change a size, edit
+  `data/assembly.json` (or `data/parts.json` for the upright and rocker),
+  re-run `suspkin assembly`, and run the script again.
+* Each body gets a physical material (4130 steel, 7075-T6 aluminium) where
+  the file says so, and an appearance (satin steel, aluminium, black tyres, red
+  springs, ...) for the Render workspace. The names it tries are in the
+  `APPEARANCES` block at the top of `CarAssembly.py`; if your library calls one
+  something else, the finish message says which, and you can drag an
+  appearance on by hand (press **A**).
+* The parts are simple stand-ins built from cylinders, boxes and rings: real
+  enough to check clearances and to render, not drawings to make parts from.
+  The upright, rocker and bracket are the exact Phase 9 shapes (without the
+  fillets you added by hand for the FEA).

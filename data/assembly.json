@@ -1,0 +1,146 @@
+{
+  "_note": "Phase 10 whole-car assembly: sizes of the stand-in parts that `suspkin assembly` draws around the hardpoints (A-arm tubes, rod ends, damper, anti-roll bar, steering rack, wheels). The upright, rocker and pushrod bracket come from data/parts.json (Phase 9), so they match the parts that were stress-checked. All sizes in mm. Change a number and re-run `suspkin assembly` to get a new results/car_assembly.json for the Fusion CarAssembly script.",
+  "tubes": {
+    "_note": "Outside diameter and wall. 19.05 x 1.65 is 3/4 in x 0.065 in 4130 tube, the sizes checked in Phase 8 (data/load_cases.json).",
+    "arm": {
+      "od": 19.05,
+      "wall": 1.65
+    },
+    "tie_rod": {
+      "od": 15.875,
+      "wall": 1.65
+    },
+    "pushrod": {
+      "od": 15.875,
+      "wall": 1.24
+    },
+    "drop_link": {
+      "od": 10.0,
+      "wall": 0.0
+    },
+    "arb_bar": {
+      "od": 15.875,
+      "wall": 1.65
+    }
+  },
+  "rod_end": {
+    "radius": 11.0,
+    "width": 12.0,
+    "_note": "Simple stand-in: a short cylinder (the eye) centred on the pivot, along its bolt."
+  },
+  "drop_link_rod_end": {
+    "radius": 8.0,
+    "width": 8.0
+  },
+  "clevis": {
+    "plate_thickness": 3.0,
+    "gap_to_boss": 1.0,
+    "_note": "The wishbone's outer end straddles the upright's ball joint boss (bearing axis fore-aft): two plates either side of the boss."
+  },
+  "damper": {
+    "body_radius": 22.0,
+    "body_length": 110.0,
+    "shaft_radius": 6.0,
+    "spring_outer_radius": 30.0,
+    "spring_wire_radius": 4.0,
+    "spring_turns": 7,
+    "_note": "About the size of a typical FSAE damper (e.g. 200 mm eye to eye). The coil spring is drawn as a stack of rings."
+  },
+  "arb": {
+    "arm_width": 20.0,
+    "arm_thickness": 6.0,
+    "bearing_radius": 16.0,
+    "bearing_length": 20.0,
+    "bearing_inset": 20.0,
+    "_note": "Blade arm from ARP to ARA; the bar turns in two bearing blocks, bearing_inset mm inboard of each arm."
+  },
+  "steering_rack": {
+    "housing_radius": 16.0,
+    "housing_half_length": 130.0,
+    "rod_radius": 8.0,
+    "pinion_radius": 14.0,
+    "pinion_length": 60.0,
+    "_note": "Front only. The housing sits on the line between the two inner tie rod ends; the rack rods run out to them."
+  },
+  "wheel": {
+    "tyre_width": 180.0,
+    "rim_bead_radius": 127.0,
+    "rim_inner_radius": 117.0,
+    "rim_width": 178.0,
+    "hub_radius": 45.0,
+    "hub_thickness": 12.0,
+    "spokes": 5,
+    "spoke_width": 24.0,
+    "spoke_thickness": 10.0,
+    "_note": "10 in rim (127 mm bead radius), 7 in wide tyre. The tyre's outer radius is the loaded radius, WC to CP. The centre (hub and spokes) sits at the hub face (packaging.hub_face_axial_mm in the hardpoints file)."
+  },
+  "frame": {
+    "_note": "Phase 10 step 2: an FSAE-style tube space frame built around the suspension pickups (see solver/suspkin/frame.py). Points are LEFT side, car coordinates (mm, x forward from the front axle line, z up from the ground); the right side is mirrored. Every A-arm pickup (UAF, UAA, LAF, LAA) sits on a short tab just outboard of a frame node (pickup_tab_mm), so every wishbone pivots at a joint of the frame and the rails stay clear of the tie rods and rack. The hoop heights and positions are made-up but FSAE-like; this is a visual and packaging model, not a rules-checked frame.",
+    "tubes": {
+      "hoop": {
+        "od": 25.4,
+        "wall": 2.4,
+        "_note": "Front and main hoop (1 in x 0.095 in)"
+      },
+      "primary": {
+        "od": 25.4,
+        "wall": 1.65,
+        "_note": "Side impact, bulkhead, hoop braces, rails"
+      },
+      "secondary": {
+        "od": 19.05,
+        "wall": 1.25,
+        "_note": "Diagonals and cross members"
+      }
+    },
+    "front_bulkhead": {
+      "x": 300.0,
+      "lower": [170.0, 85.0],
+      "upper": [220.0, 300.0],
+      "top": [190.0, 460.0]
+    },
+    "front_hoop": {
+      "x": -350.0,
+      "points": [
+        [260.0, 90.0],
+        [300.0, 300.0],
+        [260.0, 520.0],
+        [130.0, 610.0]
+      ]
+    },
+    "cockpit": {
+      "x": -700.0,
+      "lower": [300.0, 90.0],
+      "upper": [335.0, 300.0]
+    },
+    "main_hoop": {
+      "x": -1050.0,
+      "points": [
+        [330.0, 95.0],
+        [360.0, 300.0],
+        [330.0, 700.0],
+        [160.0, 1080.0]
+      ]
+    },
+    "rear_end": {
+      "x_behind_rear_axle": -200.0,
+      "lower": [170.0, 90.0],
+      "top": [180.0, 474.0]
+    },
+    "rocker_mount": {
+      "top_node_y": 200.0,
+      "behind_rocker_mm": 50.0,
+      "_note": "The rocker and damper hang off a top cross tube this far behind the rocker pivot, at the damper's chassis-end height; a strut from there down to the upper wishbone rail carries the rocker pivot tab. The top side rail runs at top_rail_y, outboard of the rocker and damper, so nothing crosses them.",
+      "top_rail_y": 310.0
+    },
+    "tab": {
+      "thickness": 4.0,
+      "width": 24.0
+    },
+    "pickup_tab_mm": {
+      "lower": [45.0, 35.0],
+      "upper": [60.0, 0.0],
+      "_note": "[inboard, down] from each wishbone pickup to its frame node; the pickup sits on a tab between them."
+    }
+  }
+}
