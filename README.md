@@ -655,7 +655,11 @@ the **upright**, the **rocker** and the **pushrod bracket**, then checks
 their stress three ways: hand calculations, a quick built-in finite element
 (FE) analysis, and a final study in Ansys Student, which you run yourself.
 The step-by-step for Fusion and Ansys is in
-[`docs/phase9-fea-guide.md`](docs/phase9-fea-guide.md).
+[`docs/phase9-fea-guide.md`](docs/phase9-fea-guide.md), and the Ansys results
+for the front upright are in
+[`docs/phase9-ansys-results.md`](docs/phase9-ansys-results.md): about
+**150 MPa, safety factor 3.4** in the worst case, within 10% of the hand
+calc, after three rounds of finding and filleting sharp corners.
 
 ```bash
 suspkin loads data/optimized_front.json data/optimized_rear.json      # now with rocker loads
