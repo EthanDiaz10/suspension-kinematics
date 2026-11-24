@@ -742,7 +742,7 @@ factor of 2 on yield (7075-T6: 503 MPa, 4130: 435 MPa).
 
 | Part (mass) | Worst case | Hand calc, worst arm root | Quick FE peak | Safety factor | Mesh convergence |
 |---|---|---|---|---|---|
-| Front upright (508 g) | Braking while cornering (outside) | 136 MPa (steering arm) | 180 to 213 MPa | 2.4 to 2.8 | Not settled: the peak sits on a 2 mm fillet at the lower ball joint arm's root, too small for a 2 to 3 mm mesh. The Ansys study refines it locally (guide section 3.4) |
+| Front upright (508 g) | Braking while cornering (outside) | 136 MPa (steering arm) | 180 to 213 MPa | 2.4 to 2.8 | Not settled in the quick FE (a sharp corner). **Ansys, filleted: about 150 MPa, SF 3.4** (see below) |
 | Rear upright (517 g) | Acceleration | 89 MPa (toe link arm) | 95 MPa | 5.3 | Converged (0%) |
 | Front rocker (106 g) | 3 g bump | 106 MPa (damper arm) | 145 MPa | 3.5 | Converged (0.5%) |
 | Rear rocker (106 g) | 3 g bump | 122 MPa (damper arm) | 167 MPa | 3.0 | Converged (0.5%) |
@@ -766,10 +766,35 @@ toe change.
 
 ![Stress in the front parts](docs/images/parts.png)
 
-Ansys Student is the final word: section 3 of the guide sets up the same
-supports and loads (fixed bearing bore, a Remote Force on each joint hole,
-caliper forces under braking), with Fusion fillets and a mesh convergence
-table, then compares all three methods.
+### 5. Ansys Student: the final check of the front upright
+
+The front upright was re-checked in Ansys Mechanical (Student) with the same
+supports and loads: the bearing bore held fixed, and a Remote Force on each
+joint hole, including the caliper bolts that carry the brake torque.
+
+![Front upright, Ansys setup](docs/images/ansys/setup.png)
+
+| Method | Peak stress | Safety factor |
+|---|---|---|
+| Hand calc (steering arm root) | 136 MPa | 3.7 |
+| Quick FE (sharp corners) | 212 MPa | 2.4 |
+| **Ansys, filleted** | **~150 MPa** | **3.4** |
+
+![Front upright, von Mises stress in Ansys](docs/images/ansys/stress_full.png)
+
+The interesting part was the mesh convergence. With the corner between the
+steering arm and the lower ball joint arm left sharp, refining the mesh
+there sent the peak from 157 to 237 to 320 MPa, and it would have kept
+going: a sharp inside corner is a *singularity*, so its stress has no
+converged value. Filleting it in Fusion brought the peak down to about
+145 MPa. The last unfilleted modelling edge still climbs under adaptive
+refinement while the deformation stays at 0.34 mm from 56k to 905k nodes,
+so the design stress is read from the fillets and probes next to that edge.
+
+![Sharp corner: 320 MPa and still rising](docs/images/ansys/sharp_corner_320MPa.png)
+
+The full write-up, with the convergence tables, probe readings and lessons
+learned, is in [`docs/phase9-ansys-results.md`](docs/phase9-ansys-results.md).
 
 ### Files it writes (in `results/`)
 
