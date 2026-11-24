@@ -103,6 +103,14 @@ def main(argv: list[str] | None = None) -> None:
     pa.add_argument("--only", nargs="*", default=None,
                     help="limit to some parts, e.g. --only front_upright rear_rocker")
 
+    asm = sub.add_parser("assembly", help="whole car: every part of all four corners for the Fusion CarAssembly script")
+    asm.add_argument("front", help="front hardpoints JSON file")
+    asm.add_argument("rear", help="rear hardpoints JSON file")
+    asm.add_argument("--config", default="data/assembly.json",
+                     help="sizes of the tubes, damper, wheels, ... (default data/assembly.json)")
+    asm.add_argument("--parts", default="data/parts.json", help="part sizes (default data/parts.json)")
+    asm.add_argument("--out", default="results", help="output folder (default results/)")
+
     o = sub.add_parser("optimize", help="nudge hardpoints toward the targets in a config file")
     o.add_argument("hardpoints", help="starting hardpoints JSON file")
     o.add_argument("config", help="optimiser config JSON (variables, goals)")
@@ -114,6 +122,7 @@ def main(argv: list[str] | None = None) -> None:
 
     args = parser.parse_args(argv)
     {"sweep": run_sweep, "steer": run_steer, "roll": run_roll, "car": run_car, "loads": run_loads, "parts": run_parts,
+     "assembly": run_assembly,
      "optimize": run_optimize,
      "check": run_check}[args.command](args)
 
@@ -425,6 +434,31 @@ def run_loads(args) -> None:
           f"to {out.resolve()}")
     if any(m.sf < cfg.required_sf for m in result.checks):
         print("WARNING: at least one member is below the required safety factor (see FAIL above)")
+
+
+def run_assembly(args) -> None:
+    from .assembly import build_assembly, group_bounds, load_config
+    from .parts import PartsConfig
+    try:
+        front = load_hardpoints(args.front)
+        rear = load_hardpoints(args.rear)
+        asm = build_assembly(front, rear, load_config(args.config), PartsConfig.load(args.parts))
+    except (OSError, ValueError, KeyError) as e:
+        raise SystemExit(f"{type(e).__name__}: {e}")
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / "car_assembly.json"
+    path.write_text(json.dumps(asm, indent=1))
+    print(f"Whole car: wheelbase {asm['wheelbase_mm']:.0f} mm, "
+          f"front track {asm['axles']['front']['track_mm']:.0f} mm, "
+          f"rear track {asm['axles']['rear']['track_mm']:.0f} mm")
+    for g in asm["groups"]:
+        lo, hi = group_bounds(g)
+        n = sum(len(c["bodies"]) for c in g["components"])
+        print(f"  {g['name']:24s} {len(g['components']):2d} parts {n:3d} bodies   "
+              f"x {lo[0]:6.0f} to {hi[0]:6.0f}   y {lo[1]:5.0f} to {hi[1]:5.0f}")
+    print(f"\n{asm['body_count']} bodies -> {path.resolve()}")
+    print("Next: run the CarAssembly script in Fusion (cad/fusion/README.md).")
 
 
 def run_parts(args) -> None:

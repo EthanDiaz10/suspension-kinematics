@@ -807,6 +807,32 @@ learned, is in [`docs/phase9-ansys-results.md`](docs/phase9-ansys-results.md).
 | `parts_fea.csv` | The quick FE results and mesh convergence (with `--fea`) |
 | `*_rocker_loads.csv` | Damper, drop link, pivot and bearing loads (from `suspkin loads`) |
 
+## The whole car in Fusion (Phase 10)
+
+<p align="center"><img src="docs/images/car_assembly_preview.png" width="720" alt="Preview of the whole-car suspension assembly"></p>
+
+`suspkin assembly` puts every part of the car's suspension into one file,
+and the Fusion script `cad/fusion/CarAssembly` builds it in one go: all four
+corners (A-arms with rod ends and clevises, tie rods and toe links, pushrods,
+the Phase 9 uprights, rockers and pushrod brackets, dampers with springs,
+drop links), both anti-roll bars, the steering rack, and 10 inch wheels and
+tyres. The right side is the left side mirrored and the rear corners sit one
+wheelbase back, exactly as the solver sees them.
+
+```powershell
+suspkin assembly data\optimized_front.json data\optimized_rear.json   # writes results\car_assembly.json
+```
+
+Then run **CarAssembly** in Fusion (install it like the other scripts: see
+[`cad/fusion/README.md`](cad/fusion/README.md)). It finds
+`results\car_assembly.json` by itself, builds about 150 bodies in nested
+components (one per corner, one per part), sets materials and appearances
+for rendering, and saves `results\car_assembly.step`.
+
+Sizes of the stand-in parts (tube sizes, rod ends, damper, wheels) are in
+`data/assembly.json`. The picture above is a quick preview drawn from the same
+file, not a Fusion render.
+
 ## Working on more than one PC
 
 Git keeps every PC in sync through GitHub. Set up each PC once:
@@ -849,13 +875,13 @@ Tips:
 - [ ] Optimiser goals for Ackermann (needs a steering sweep inside the loop)
 - [x] **Phase 5:** roll sweep: both corners at once, roll camber and steer, roll centre under roll, roll stiffness from the springs
 - [x] **Phase 6:** front anti-roll bar, roll per g, front/rear load transfer split, static camber chosen for the design cornering load
-- [ ] Draw the anti-roll bar in the Fusion script
+- [x] Draw the anti-roll bar in the Fusion script (Phase 10, `CarAssembly`)
 - [x] **Phase 7:** rear corner (toe link, anti-squat and anti-lift, rear anti-roll bar), `suspkin car` for the whole-car roll stiffness split, load transfer, roll per g and tyre loads, rear corner in the Fusion script
 - [x] **Phase 8:** load cases, tyre loads, the force in every link, tube (yield, Euler/Johnson buckling) and rod end checks, lightest passing tube, upright loads exported for a Fusion stress check
 - [x] **Phase 9:** rocker, damper and anti-roll bar forces; upright, rocker and pushrod bracket designed around the hardpoints; hand calcs, STEP export, built-in FE check with mesh convergence; Fusion parts script; Ansys Student guide
 - [ ] Joint loads at full bump instead of ride height
 - [ ] Topology optimisation / pocketing of the upright to save weight
-- [ ] **Phase 10:** full-car Fusion assembly, renders and a design report
+- [ ] **Phase 10:** full-car Fusion assembly (done: `suspkin assembly` + `CarAssembly`), FSAE-style space frame, renders and a design report
 
 ## License
 

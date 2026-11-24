@@ -1,0 +1,10 @@
+{
+	"autodeskProduct": "Fusion",
+	"type": "script",
+	"author": "EthanDiaz10",
+	"description": {
+		"": "Builds the whole car's suspension (four corners, anti-roll bars, steering rack, wheels) from results/car_assembly.json (Phase 10) and exports STEP."
+	},
+	"supportedOS": "windows|mac",
+	"editEnabled": true
+}
