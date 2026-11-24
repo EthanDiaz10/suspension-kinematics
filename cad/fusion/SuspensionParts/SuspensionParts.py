@@ -66,6 +66,25 @@ def to_cm(p, up_axis=UP_AXIS):
     return map_vector([c / MM_PER_CM for c in p], up_axis)
 
 
+def box_axes(length_dir, width_dir):
+    """Exactly perpendicular unit length / width directions for a box.
+
+    The parts file rounds directions to 6 decimals, which leaves them about
+    1e-7 off perpendicular. Fusion's OrientedBoundingBox3D rejects that
+    ("invalid argument widthDirection"), so tidy them up first: normalise the
+    length direction, remove its component from the width direction, normalise.
+    """
+    def unit(v):
+        n = sum(c * c for c in v) ** 0.5
+        if n == 0:
+            raise ValueError("zero-length box direction")
+        return [c / n for c in v]
+    l = unit(length_dir)
+    dot = sum(a * b for a, b in zip(width_dir, l))
+    w = unit([a - dot * b for a, b in zip(width_dir, l)])
+    return l, w
+
+
 def read_parts(path):
     """Read and sanity-check a parts file."""
     with open(path) as fh:
@@ -105,8 +124,9 @@ def temp_solid(tbm, s):
         r = s["radius"] / MM_PER_CM
         return tbm.createCylinderOrCone(point(s["p1"]), r, point(s["p2"]), r)
     if s["type"] == "box":
+        l, w = box_axes(s["length_dir"], s["width_dir"])
         box = adsk.core.OrientedBoundingBox3D.create(
-            point(s["center"]), vector(s["length_dir"]), vector(s["width_dir"]),
+            point(s["center"]), vector(l), vector(w),
             s["length"] / MM_PER_CM, s["width"] / MM_PER_CM, s["height"] / MM_PER_CM)
         return tbm.createBox(box)
     raise ValueError("unknown solid type {!r}".format(s["type"]))

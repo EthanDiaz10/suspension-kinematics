@@ -132,6 +132,14 @@ def test_parts_json_round_trips_into_the_fusion_reader(built, cfg, tmp_path):
             raw = script.read_parts(str(path))
             assert set(raw["parts"]) == set(parts)
             assert script.to_cm([10.0, 20.0, 30.0], "Y") == (1.0, 3.0, -2.0)
+            # Fusion rejects box directions that are even 1e-7 off perpendicular
+            for part in raw["parts"].values():
+                for s in part["solids"] + part["cuts"]:
+                    if s["type"] == "box":
+                        lv, wv = (np.array(v) for v in script.box_axes(s["length_dir"], s["width_dir"]))
+                        assert abs(lv @ wv) < 1e-15
+                        assert np.linalg.norm(lv) == pytest.approx(1, abs=1e-15)
+                        assert np.linalg.norm(wv) == pytest.approx(1, abs=1e-15)
     finally:
         sys.path.remove(str(FUSION))
 
