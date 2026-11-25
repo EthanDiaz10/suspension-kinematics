@@ -9,24 +9,62 @@ one Python tool, so a design change is a number edit and a re-run, not a remodel
 **Read the [design report](docs/design-report.md)** for the finished design and why
 it is the way it is.
 
-## What it does
+## The problem
 
-The suspension is defined by a few dozen pivot points (hardpoints) in a JSON file.
-From those, the `suspkin` Python package:
+A suspension's behaviour is set almost entirely by where its pivot points
+(hardpoints) are. Move one by a few millimetres and the camber, steering feel, roll
+and loads all change. Doing that by hand in CAD is slow, so the goal was a tool
+where the hardpoints live in a JSON file, every number is calculated from them, and
+the CAD is rebuilt from the same file. That tool was then used to design a complete
+car's suspension and justify every choice.
 
-1. **Solves the kinematics.** It moves the wheel through bump, roll and steering and
-   reports camber, toe, roll centre, caster, kingpin angle, scrub, Ackermann and the
-   pushrod and rocker motion ratio.
-2. **Optimises the geometry.** It moves chosen hardpoints toward targets you set,
-   while keeping every joint inside the 10 inch wheel rim.
-3. **Models the whole car.** It covers springs, anti-roll bars, roll per g, the
-   front/rear load transfer split, anti-dive and anti-squat.
-4. **Sizes the parts.** It finds the force in every link under braking, cornering
-   and bumps, checks every tube and rod end, and designs and stress-checks the
-   uprights and rockers (hand calcs, built-in FE, and Ansys Student).
-5. **Builds the CAD.** Fusion scripts draw the whole car from the same numbers:
-   four corners, dampers, anti-roll bars, steering rack, wheels and a tube space
-   frame, exported as STEP.
+## What we did and found
+
+**1. Kinematics solver.** The tool moves the wheel through ±50 mm of bump, through
+body roll and through steering. At every step it reports camber, toe, roll centre,
+caster, kingpin angle, scrub and Ackermann. The first, hand-drawn front corner had
+reasonable camber gain, but its roll centre moved 0.38 mm for every mm of bump. That
+would make the car's handling change as it rises and falls.
+
+<p align="center"><img src="docs/images/report/front_sweep.png" width="720" alt="Front corner over ±50 mm of wheel travel"></p>
+
+**2. Optimiser.** It moves chosen hardpoints toward targets while keeping every joint
+inside the 10 inch rim. It cut the roll centre movement from 0.38 to 0.04 mm per mm.
+Left alone, it also squeezed the ball joints closer together, which would have
+doubled the arm loads, so a ball joint spread goal was added to stop it. The rear
+corner got its own run, adding goals for anti-squat and toe change.
+
+**3. Pushrods, steering and side view.** A pushrod and rocker drive each damper, with
+a motion ratio of about 0.78 that rises gently through bump. Moving the
+wishbones' front pivots up or down gave 23% anti-dive at the front and 25% anti-squat at the
+rear, which cuts pitch under braking and acceleration. Moving the outer tie rod end
+outboard turned the steering from -16% to +17% Ackermann, which suits tight FSAE
+corners.
+
+**4. Roll and balance.** With springs alone, the front took only 39% of the
+cornering load transfer, less than its 47% weight share, so the car would lean
+toward oversteer. Anti-roll bars brought it to 52% (mild understeer) and set the roll
+to 0.84° per g. Static camber of -1.75° puts the outside tyres at almost exactly the
+-1° target at 1.5 g. One finding to fix: the front inside tyre lifts at about 1.9 g.
+
+**5. Loads and tube sizing.** For braking, cornering, combined braking and
+cornering, acceleration and a 3 g bump, the tool works out the force in every link
+(up to 5.2 kN) and checks each tube and rod end for yield and buckling. Everything
+passes. The weakest part is a front rod end at a safety factor of 3.8 against the
+1.5 required. A second finding: the 65% front brake bias is too low, and about 77%
+would be ideal at 1.6 g.
+
+**6. Uprights and rockers.** These parts are generated around the hardpoints and
+checked three ways: hand calcs, a built-in FE model, and Ansys Student. Making the
+upper ball joint housing a realistic size meant lowering that joint 6 mm to fit inside
+the rim. The Ansys study showed that a sharp inside corner gives a stress that never
+settles as the mesh is refined. A proper fillet brought it to about 150 MPa, a safety
+factor of 3.4.
+
+**7. The whole car in CAD.** The same numbers build the complete car in Fusion: four
+corners, dampers, anti-roll bars, steering rack, wheels, and a 126-tube space frame of
+about 34 kg. Every wishbone pickup sits at a frame node, and a clearance check
+confirms no tube comes within 3 mm of a suspension part.
 
 ## Key results
 
