@@ -811,7 +811,7 @@ learned, is in [`docs/phase9-ansys-results.md`](docs/phase9-ansys-results.md).
 
 ## The whole car in Fusion (Phase 10)
 
-<p align="center"><img src="docs/images/renders/hero_front34.png" width="720" alt="The whole car rendered in Fusion: space frame and suspension"></p>
+<p align="center"><img src="docs/images/renders/front_corner.png" width="720" alt="The whole car rendered in Fusion, front-left wheel removed to show the corner"></p>
 
 `suspkin assembly` puts every part of the car into one file, and the Fusion
 script `cad/fusion/CarAssembly` builds it in one go:
