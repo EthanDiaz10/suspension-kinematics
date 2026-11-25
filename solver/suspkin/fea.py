@@ -1,7 +1,7 @@
 """Phase 9: STEP export and a quick finite element check of the parts.
 
 This is a *cross-check*, not the final study. The final study is done in
-Fusion and Ansys (see ``docs/phase9-fea-guide.md``); this one runs in a few
+Fusion and Ansys (see ``docs/full-breakdown/phase9-fea-guide.md``); this one runs in a few
 seconds per part so you know roughly what to expect before you open them,
 and it gives a second, independent answer to compare against.
 

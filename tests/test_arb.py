@@ -147,7 +147,7 @@ def test_suggested_static_camber_hits_the_target(hp, vehicle):
 
 
 def test_optimised_design_numbers(hp, roll, vehicle):
-    """Numbers quoted in the README for data/optimized_front.json."""
+    """Numbers quoted in docs/full-breakdown/technical-guide.md for data/optimized_front.json."""
     s = roll_summary(roll, vehicle)
     assert 49 < s["front_load_transfer_share_pct"] < 53       # a little above 47% front weight
     assert 0.7 < s["roll_gradient_deg_per_g"] < 0.9
