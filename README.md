@@ -839,8 +839,7 @@ The command also runs a **clearance check**: it reports any frame tube that
 comes within 3 mm of a suspension part (tubes, rod ends, damper, spring,
 rack, anti-roll bar), treating each as round. For the current design nothing
 does; the closest are the spring perches, about 5 mm from the rocker cross
-tubes. That's at ride height only; checking full bump and droop is on the
-roadmap.
+tubes. That's at ride height only.
 
 Then run **CarAssembly** in Fusion (install it like the other scripts: see
 [`cad/fusion/README.md`](cad/fusion/README.md)). It finds
@@ -885,25 +884,6 @@ Tips:
   `git add` the file and `git commit`.
 * For a risky experiment, use a branch: `git switch -c try-longer-upper-arm`.
   Merge it back if you like it, delete it if not.
-
-## Roadmap
-
-- [x] **Phase 1:** repo scaffold, baseline hardpoints, bump sweep, camber/toe and other metrics, tests
-- [x] **Phase 2:** optimisation, nudging chosen hardpoints to hit targets (camber gain, bump steer, roll centre height and migration) within 10" rim packaging limits
-- [x] **Phase 3:** Fusion script: master 3D sketch, tube solids with ball joints and rod ends, STEP export, from hardpoints or `*_poses.json`
-- [ ] Optimiser goal for scrub radius and mechanical trail
-- [x] **Phase 4:** pushrod and rocker stage (motion ratio, rocker layout checks), side-view instant centre with anti-dive / anti-squat, steering sweep with Ackermann, rocker and damper in the Fusion script
-- [ ] Optimiser goals for Ackermann (needs a steering sweep inside the loop)
-- [x] **Phase 5:** roll sweep: both corners at once, roll camber and steer, roll centre under roll, roll stiffness from the springs
-- [x] **Phase 6:** front anti-roll bar, roll per g, front/rear load transfer split, static camber chosen for the design cornering load
-- [x] Draw the anti-roll bar in the Fusion script (Phase 10, `CarAssembly`)
-- [x] **Phase 7:** rear corner (toe link, anti-squat and anti-lift, rear anti-roll bar), `suspkin car` for the whole-car roll stiffness split, load transfer, roll per g and tyre loads, rear corner in the Fusion script
-- [x] **Phase 8:** load cases, tyre loads, the force in every link, tube (yield, Euler/Johnson buckling) and rod end checks, lightest passing tube, upright loads exported for a Fusion stress check
-- [x] **Phase 9:** rocker, damper and anti-roll bar forces; upright, rocker and pushrod bracket designed around the hardpoints; hand calcs, STEP export, built-in FE check with mesh convergence; Fusion parts script; Ansys Student guide
-- [ ] Joint loads at full bump instead of ride height
-- [ ] Topology optimisation / pocketing of the upright to save weight
-- [ ] **Phase 10:** full-car Fusion assembly (done: `suspkin assembly` + `CarAssembly`, FSAE-style space frame, clearance check, [design report](docs/design-report.md), renders)
-- [ ] Frame clearance check at full bump, droop and steering lock
 
 ## License
 
