@@ -3,7 +3,7 @@
 A complete front and rear double-wishbone suspension for a made-up Formula SAE style
 car, from hardpoints to CAD. Every number here comes from the tools in this repo
 and can be re-run. Every hardpoint and the full tables are in the
-[full design notes](design-details.md).
+[full design notes](full-breakdown/design-details.md).
 
 ![The whole car, rendered in Fusion](images/renders/hero_front34.png)
 
@@ -117,7 +117,7 @@ stiffness and damage tolerance.
 The Ansys study had one key lesson. With a sharp inside corner on the upright, the
 peak stress kept rising as the mesh was refined (157 to 320 MPa), because a sharp
 corner has no true stress value. A real fillet brought it down to about 150 MPa.
-The full study is in [phase9-ansys-results.md](phase9-ansys-results.md).
+The full study is in [phase9-ansys-results.md](full-breakdown/phase9-ansys-results.md).
 
 ## 7. The whole car
 
@@ -147,4 +147,4 @@ What I'd change next:
 4. **Lighten the uprights** (about 510 g now; 350 to 450 g is typical) with pockets.
 5. **Add a tyre model** to turn camber and load transfer into grip and lap time.
 
-To reproduce everything, see the [technical guide](technical-guide.md).
+To reproduce everything, see the [technical guide](full-breakdown/technical-guide.md).

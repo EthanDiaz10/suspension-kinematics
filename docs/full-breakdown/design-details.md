@@ -1,6 +1,6 @@
 # Full design notes: a made-up FSAE-style car
 
-The long version of the [design report](design-report.md), with every hardpoint, table and
+The long version of the [design report](../design-report.md), with every hardpoint, table and
 step of how the design got where it is.
 
 A complete front and rear double-wishbone suspension, from hardpoints to CAD. Every
@@ -8,13 +8,13 @@ number here comes from the tools in this repo, so any of them can be re-run and
 checked. It's a personal design project. The car is made up, but it's sized like a
 Formula SAE car, because those cars are well documented and realistic.
 
-![The whole car, rendered in Fusion](images/renders/hero_front34.png)
+![The whole car, rendered in Fusion](../images/renders/hero_front34.png)
 
 *The whole car, rendered in Autodesk Fusion. The model is built by
 `cad/fusion/CarAssembly` from `suspkin assembly`: four corners, both anti-roll bars,
 the steering rack, wheels and a tube space frame.*
 
-![The suspension on its own](images/renders/suspension_only.png)
+![The suspension on its own](../images/renders/suspension_only.png)
 
 *The same car with the frame hidden and the front-left wheel removed. You can see the
 upright, the wishbones meeting it, the pushrod running up to the rocker, and the
@@ -141,7 +141,7 @@ from the drop link force agreeing with the roll model.
 
 ## 5. Front corner
 
-![Front corner over ±50 mm of wheel travel](images/report/front_sweep.png)
+![Front corner over ±50 mm of wheel travel](../images/report/front_sweep.png)
 
 | Hardpoint (front left, mm) | x | y | z |
 |---|---|---|---|
@@ -183,7 +183,7 @@ Results at ride height: camber gain -0.38°/10 mm, toe change 0.001° over
 chassis, caster 4.0°, KPI 6.2°, scrub radius 19.6 mm, mechanical trail 15 mm, and
 anti-dive 23%.
 
-![Steering and Ackermann](images/report/steering.png)
+![Steering and Ackermann](../images/report/steering.png)
 
 **Steering.** With ±25 mm of rack travel the inner wheel reaches 23.9° and the
 outer 22.4°. That's +17% Ackermann and a 3.6 m turning radius. Moving the outer tie
@@ -199,7 +199,7 @@ at ride height, which keeps the ratio well behaved.
 
 ## 6. Rear corner
 
-![Rear corner over ±50 mm of wheel travel](images/report/rear_sweep.png)
+![Rear corner over ±50 mm of wheel travel](../images/report/rear_sweep.png)
 
 | Hardpoint (rear left, mm, origin at the rear axle) | x | y | z |
 |---|---|---|---|
@@ -232,7 +232,7 @@ rear, which is the usual layout.
 
 ## 7. Springs, anti-roll bars and the whole car in roll
 
-![Whole car in steady cornering](images/report/whole_car.png)
+![Whole car in steady cornering](../images/report/whole_car.png)
 
 **Springs.** I picked the springs for ride frequency first. At 35 N/mm front and
 40 N/mm rear, the wheel rates (spring rate × motion ratio²) are 21.2 and 23.4 N/mm.
@@ -261,13 +261,13 @@ outside tyre at exactly -1° is -1.73° front and -1.75° rear. The front inside
 is the one to watch: at 1.5 g it carries only a fifth of its static load, and it
 would lift at about 1.9 g.
 
-![Front axle in roll](images/report/front_roll.png)
+![Front axle in roll](../images/report/front_roll.png)
 
 ---
 
 ## 8. Loads and sizing
 
-![Link forces and safety factors](images/report/loads.png)
+![Link forces and safety factors](../images/report/loads.png)
 
 Seven load cases, using tyre forces from the whole-car model (rigid tyres, 20 mm
 of pneumatic trail):
@@ -327,7 +327,7 @@ After filleting it in Fusion the peak dropped to about 145-150 MPa. The deformat
 (0.34 mm at the steering arm, about 0.03° of steer) stayed the same from 56k to
 905k nodes. The full study is in [phase9-ansys-results.md](phase9-ansys-results.md).
 
-![Front upright in Ansys](images/ansys/stress_full.png)
+![Front upright in Ansys](../images/ansys/stress_full.png)
 
 ---
 
@@ -358,12 +358,12 @@ FSAE rules or for strength.
 
 | | |
 |---|---|
-| ![Side](images/renders/side.png) | ![Front](images/renders/front.png) |
+| ![Side](../images/renders/side.png) | ![Front](../images/renders/front.png) |
 | *Side: 1550 mm wheelbase, front and main hoops* | *Front: wishbones, pushrods and the rocker cross tube* |
-| ![Rear](images/renders/rear.png) | ![Front corner](images/renders/front_corner.png) |
+| ![Rear](../images/renders/rear.png) | ![Front corner](../images/renders/front_corner.png) |
 | *Rear* | *Front-left corner with the wheel removed: upright, wishbones, pushrod and bracket, tie rod and rack* |
 
-![Front suspension from above](images/renders/front_rockers_top.png)
+![Front suspension from above](../images/renders/front_rockers_top.png)
 
 *Front suspension from above, frame and wheels hidden: the two dampers lying across the
 car, the anti-roll bar behind them, the rack at the front, and the wishbones running out

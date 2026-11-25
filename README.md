@@ -80,15 +80,12 @@ car ([how](cad/fusion/README.md)).
 | `data/` | Hardpoints, optimiser settings, load cases and part sizes (JSON) |
 | `cad/fusion/` | Fusion scripts that build the corner, the parts and the whole car |
 | `tests/` | `pytest` checks |
-| `docs/` | Design report, technical guide and images |
+| `docs/` | Design report, images, and the [full breakdown](docs/full-breakdown/) |
 
 ## More detail
 
-* [Design report](docs/design-report.md): the design, the choices behind it and the results.
-* [Technical guide](docs/technical-guide.md): every command, the conventions, and what
-  each phase of the project added.
-* [Full design notes](docs/design-details.md): every hardpoint and table.
-* [Ansys results](docs/phase9-ansys-results.md): the front upright stress study.
+The [full breakdown](docs/full-breakdown/) folder has everything else: every command,
+every hardpoint, each phase of the project step by step, and the Ansys study.
 
 ## License
 

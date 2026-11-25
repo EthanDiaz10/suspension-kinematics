@@ -13,7 +13,7 @@ What it does, in order:
    (7075-T6 aluminium, 4130 steel), so *Inspect > Properties* shows the mass.
 4. Exports everything as one STEP file next to the parts file.
 
-After that, the usual next steps by hand (see docs/phase9-fea-guide.md):
+After that, the usual next steps by hand (see docs/full-breakdown/phase9-fea-guide.md):
 fillet the inside corners, then run the stress study.
 
 The parts file is plain JSON written by solver/suspkin/parts.py; this script
@@ -236,7 +236,7 @@ def run(context):
         lines = ["Built:"] + ["  " + b for b in built]
         lines += ["", "STEP: " + (step or "not exported"),
                   "", "Next: fillet the inside corners (3-5 mm), then run the stress study",
-                  "(docs/phase9-fea-guide.md)."]
+                  "(docs/full-breakdown/phase9-fea-guide.md)."]
         if notes:
             lines += [""] + notes
         ui.messageBox("\n".join(lines), "Suspension parts")

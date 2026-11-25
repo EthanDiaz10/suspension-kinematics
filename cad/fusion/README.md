@@ -127,7 +127,7 @@ file next to the parts file.
 The parts are built from simple blocks and cylinders, so every inside corner
 is sharp: **add 3 to 4 mm fillets** where the arms meet the housing and the
 bosses before any stress study. The full workflow, including the Ansys
-Student study, is in [`docs/phase9-fea-guide.md`](../../docs/phase9-fea-guide.md).
+Student study, is in [`docs/full-breakdown/phase9-fea-guide.md`](../../docs/full-breakdown/phase9-fea-guide.md).
 
 ## Phase 10: the whole car (`CarAssembly/`)
 

@@ -2,8 +2,8 @@
 
 The full reference for the `suspkin` tools: every command, the conventions, how the
 solver works, and what each phase of the project added and found. For the short
-version, see the [README](../README.md); for the finished design and why it is the
-way it is, see the [design report](design-report.md).
+version, see the [README](../../README.md); for the finished design and why it is the
+way it is, see the [design report](../design-report.md).
 
 ## Quick start
 
@@ -64,7 +64,7 @@ sk.plot_sweep(metrics, "my_change.png")
 | `data/` | Hardpoint sets, optimiser settings and load cases (`load_cases.json`) as JSON. Copy the baseline to start a new design |
 | `tests/` | `pytest` checks (link lengths preserved, sign conventions, rim clashes, optimiser) |
 | `notebooks/` | Jupyter notebooks for exploring designs |
-| `cad/fusion/` | Fusion script that builds the sketch, tubes and joints from solver output and exports STEP ([how to run it](../cad/fusion/README.md)) |
+| `cad/fusion/` | Fusion script that builds the sketch, tubes and joints from solver output and exports STEP ([how to run it](../../cad/fusion/README.md)) |
 | `docs/images/` | Plots used in this README |
 
 The solver and the CAD script only talk through JSON files (hardpoints or
@@ -135,7 +135,7 @@ and parts are rigid (no compliance in bushes or the rocker).
 
 ## Optimisation (Phase 2)
 
-![Before vs after optimisation](images/optimization_comparison.png)
+![Before vs after optimisation](../images/optimization_comparison.png)
 
 `suspkin optimize` moves chosen hardpoints to hit targets. Everything is set in
 `data/optimize_front.json`:
@@ -197,7 +197,7 @@ fixed roll centre "drops" 1 mm per mm of bump, which is why the
 `data/optimized_front.json` (or a `*_poses.json` sweep, at any wheel travel)
 and it opens a new design with a master 3D sketch of every hardpoint and link,
 tubes with ball joints and rod ends, a see-through reference tyre, and writes
-a STEP file. Install and run steps are in [cad/fusion/README.md](../cad/fusion/README.md).
+a STEP file. Install and run steps are in [cad/fusion/README.md](../../cad/fusion/README.md).
 
 ## Pushrod, rocker, anti-dive and Ackermann (Phase 4)
 
@@ -251,7 +251,7 @@ design* below).
 
 ### Steering and Ackermann
 
-![Steering sweep of the baseline](images/steering.png)
+![Steering sweep of the baseline](../images/steering.png)
 
 `suspkin steer` moves the rack from −25 to +25 mm and reports both wheels'
 steer angles and the **Ackermann percentage** (100% = the inside wheel turns
@@ -300,9 +300,9 @@ about as far as it can go there.
 
 ## Roll sweep (Phase 5)
 
-![Roll sweep of the optimised design](images/roll_sweep.png)
+![Roll sweep of the optimised design](../images/roll_sweep.png)
 
-<p align="center"><img src="images/roll_front_view.png" width="640" alt="Front view of the whole axle at 3 degrees of roll"></p>
+<p align="center"><img src="../images/roll_front_view.png" width="640" alt="Front view of the whole axle at 3 degrees of roll"></p>
 
 `suspkin roll` leans the body from −3° to +3° and solves **both** front
 corners at once (`solver/suspkin/roll.py`). As in the steering sweep, only the
@@ -354,7 +354,7 @@ to about +0.4° at 3° of roll, which costs grip. Phase 6 fixes that.
 
 ## Anti-roll bar and roll per g (Phase 6)
 
-<p align="center"><img src="images/roll_front_view.png" width="640" alt="Front view at 3 degrees of roll with the anti-roll bar"></p>
+<p align="center"><img src="../images/roll_front_view.png" width="640" alt="Front view at 3 degrees of roll with the anti-roll bar"></p>
 
 ### The bar
 
@@ -427,7 +427,7 @@ suspkin roll data/optimized_front.json --arb-rate 10    # stiffer bar
 
 ## Rear corner and the whole car (Phase 7)
 
-![Whole car in steady cornering](images/full_car.png)
+![Whole car in steady cornering](../images/full_car.png)
 
 ### The rear corner
 
@@ -456,7 +456,7 @@ pivots together. On this rear the solution has the arms almost parallel in
 side view: the wheel moves about 0.5 mm rearward for every 10 mm of bump,
 which gives both numbers below.
 
-![Rear corner before vs after optimisation](images/rear_optimization_comparison.png)
+![Rear corner before vs after optimisation](../images/rear_optimization_comparison.png)
 
 | Rear corner | Baseline | Optimised |
 |---|---|---|
@@ -514,7 +514,7 @@ transfer to the rear (less understeer) and reduces roll.
 
 ## Load cases, link forces and tube sizing (Phase 8)
 
-![Link forces and safety factors](images/loads.png)
+![Link forces and safety factors](../images/loads.png)
 
 ```bash
 suspkin loads data/optimized_front.json data/optimized_rear.json
@@ -522,7 +522,7 @@ suspkin loads data/optimized_front.json data/optimized_rear.json
 
 answers "will these tubes and rod ends survive?" (`solver/suspkin/loads.py`).
 The cases, tube sizes, material and ratings are all in
-[`data/load_cases.json`](../data/load_cases.json), so you can change them without
+[`data/load_cases.json`](../../data/load_cases.json), so you can change them without
 touching code.
 
 ### 1. Load cases
@@ -703,7 +703,7 @@ was 0.82). The upright now clears the rim by 1.5 mm.
 
 Each part is built straight from the hardpoints out of simple cylinders and
 boxes (`solver/suspkin/parts.py`), with sizes in
-[`data/parts.json`](../data/parts.json). Change a hardpoint or a size and every
+[`data/parts.json`](../../data/parts.json). Change a hardpoint or a size and every
 part follows. The same description feeds the Fusion script
 (`cad/fusion/SuspensionParts`), the STEP export and the built-in FE.
 
@@ -751,7 +751,7 @@ upright's arms (it's heavy at about 510 g; 350 to 450 g is typical), and
 check the steering arm's stiffness, since its 0.4 mm movement turns into
 toe change.
 
-![Stress in the front parts](images/parts.png)
+![Stress in the front parts](../images/parts.png)
 
 ### 5. Ansys Student: the final check of the front upright
 
@@ -759,7 +759,7 @@ The front upright was re-checked in Ansys Mechanical (Student) with the same
 supports and loads: the bearing bore held fixed, and a Remote Force on each
 joint hole, including the caliper bolts that carry the brake torque.
 
-![Front upright, Ansys setup](images/ansys/setup.png)
+![Front upright, Ansys setup](../images/ansys/setup.png)
 
 | Method | Peak stress | Safety factor |
 |---|---|---|
@@ -767,7 +767,7 @@ joint hole, including the caliper bolts that carry the brake torque.
 | Quick FE (sharp corners) | 212 MPa | 2.4 |
 | **Ansys, filleted** | **~150 MPa** | **3.4** |
 
-![Front upright, von Mises stress in Ansys](images/ansys/stress_full.png)
+![Front upright, von Mises stress in Ansys](../images/ansys/stress_full.png)
 
 The interesting part was the mesh convergence. With the corner between the
 steering arm and the lower ball joint arm left sharp, refining the mesh
@@ -778,7 +778,7 @@ converged value. Filleting it in Fusion brought the peak down to about
 refinement while the deformation stays at 0.34 mm from 56k to 905k nodes,
 so the design stress is read from the fillets and probes next to that edge.
 
-![Sharp corner: 320 MPa and still rising](images/ansys/sharp_corner_320MPa.png)
+![Sharp corner: 320 MPa and still rising](../images/ansys/sharp_corner_320MPa.png)
 
 The full write-up, with the convergence tables, probe readings and lessons
 learned, is in [`docs/phase9-ansys-results.md`](phase9-ansys-results.md).
@@ -796,7 +796,7 @@ learned, is in [`docs/phase9-ansys-results.md`](phase9-ansys-results.md).
 
 ## The whole car in Fusion (Phase 10)
 
-<p align="center"><img src="images/renders/front_corner.png" width="720" alt="The whole car rendered in Fusion, front-left wheel removed to show the corner"></p>
+<p align="center"><img src="../images/renders/front_corner.png" width="720" alt="The whole car rendered in Fusion, front-left wheel removed to show the corner"></p>
 
 `suspkin assembly` puts every part of the car into one file, and the Fusion
 script `cad/fusion/CarAssembly` builds it in one go:
@@ -827,7 +827,7 @@ tubes. That's at ride height only; checking full bump and droop is on the
 roadmap.
 
 Then run **CarAssembly** in Fusion (install it like the other scripts: see
-[`cad/fusion/README.md`](../cad/fusion/README.md)). It finds
+[`cad/fusion/README.md`](../../cad/fusion/README.md)). It finds
 `results\car_assembly.json` by itself, builds the bodies in nested
 components (one per corner and part, plus the frame), sets materials and
 appearances for rendering, and saves `results\car_assembly.step`.
@@ -836,7 +836,7 @@ Sizes of the stand-in parts (tube sizes, rod ends, damper, wheels) and the
 frame's layout (hoop positions and heights, tube sizes, tab offsets) are in
 `data/assembly.json`. The frame is a packaging and visual model, not a
 rules-checked or stress-checked chassis. The picture above is a Fusion render of the
-result (more in the [design report](design-report.md)).
+result (more in the [design report](../design-report.md)).
 
 ## Working on more than one PC
 
@@ -886,9 +886,9 @@ Tips:
 - [x] **Phase 9:** rocker, damper and anti-roll bar forces; upright, rocker and pushrod bracket designed around the hardpoints; hand calcs, STEP export, built-in FE check with mesh convergence; Fusion parts script; Ansys Student guide
 - [ ] Joint loads at full bump instead of ride height
 - [ ] Topology optimisation / pocketing of the upright to save weight
-- [ ] **Phase 10:** full-car Fusion assembly (done: `suspkin assembly` + `CarAssembly`, FSAE-style space frame, clearance check, [design report](design-report.md), renders)
+- [ ] **Phase 10:** full-car Fusion assembly (done: `suspkin assembly` + `CarAssembly`, FSAE-style space frame, clearance check, [design report](../design-report.md), renders)
 - [ ] Frame clearance check at full bump, droop and steering lock
 
 ## License
 
-MIT, see [LICENSE](../LICENSE).
+MIT, see [LICENSE](../../LICENSE).
