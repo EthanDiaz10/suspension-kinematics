@@ -14,6 +14,8 @@ centre, roll stiffness (springs and anti-roll bar) and roll per g as the body ro
 front and the rear corner, how the whole car shares its load transfer, and the force in every link under braking, cornering, bumps and acceleration, with tube and rod end safety factors, with no manual remodelling. Or let the optimiser move the hardpoints for you,
 toward targets you set, while keeping the joints inside a 10" rim.
 
+**The finished design, with every choice explained and checked, is in the [design report](docs/design-report.md).**
+
 ![Bump sweep of the baseline front corner](docs/images/bump_sweep.png)
 
 <p align="center"><img src="docs/images/front_view.png" width="520" alt="Front view at droop, static and bump"></p>
@@ -809,7 +811,7 @@ learned, is in [`docs/phase9-ansys-results.md`](docs/phase9-ansys-results.md).
 
 ## The whole car in Fusion (Phase 10)
 
-<p align="center"><img src="docs/images/car_assembly_preview.png" width="720" alt="Preview of the whole car: space frame and suspension"></p>
+<p align="center"><img src="docs/images/renders/hero_front34.png" width="720" alt="The whole car rendered in Fusion: space frame and suspension"></p>
 
 `suspkin assembly` puts every part of the car into one file, and the Fusion
 script `cad/fusion/CarAssembly` builds it in one go:
@@ -848,8 +850,8 @@ appearances for rendering, and saves `results\car_assembly.step`.
 Sizes of the stand-in parts (tube sizes, rod ends, damper, wheels) and the
 frame's layout (hoop positions and heights, tube sizes, tab offsets) are in
 `data/assembly.json`. The frame is a packaging and visual model, not a
-rules-checked or stress-checked chassis. The picture above is a quick preview
-drawn from the same file, not a Fusion render.
+rules-checked or stress-checked chassis. The picture above is a Fusion render of the
+result (more in the [design report](docs/design-report.md)).
 
 ## Working on more than one PC
 
@@ -899,7 +901,7 @@ Tips:
 - [x] **Phase 9:** rocker, damper and anti-roll bar forces; upright, rocker and pushrod bracket designed around the hardpoints; hand calcs, STEP export, built-in FE check with mesh convergence; Fusion parts script; Ansys Student guide
 - [ ] Joint loads at full bump instead of ride height
 - [ ] Topology optimisation / pocketing of the upright to save weight
-- [ ] **Phase 10:** full-car Fusion assembly (done: `suspkin assembly` + `CarAssembly`, FSAE-style space frame, clearance check), renders and a design report
+- [ ] **Phase 10:** full-car Fusion assembly (done: `suspkin assembly` + `CarAssembly`, FSAE-style space frame, clearance check, [design report](docs/design-report.md), renders)
 - [ ] Frame clearance check at full bump, droop and steering lock
 
 ## License
