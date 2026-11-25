@@ -35,7 +35,7 @@ The joint forces balance the tyre load exactly, so the bore reaction is the
 tyre load. The two caliper bolts carry the brake torque, because the wheel
 bearing can't.
 
-![Supports and loads](../images/ansys/setup.png)
+![Supports and loads](images/ansys/setup.png)
 
 ## 2. Results
 
@@ -62,9 +62,9 @@ The Ansys peak sits within about 10% of the hand calc, which is what a
 filleted corner should give (a stress concentration factor around 1.1). The
 quick FE reads higher because its corners there were left sharp.
 
-![Stress, whole part](../images/ansys/stress_full.png)
+![Stress, whole part](images/ansys/stress_full.png)
 
-![Deformation](../images/ansys/deformation.png)
+![Deformation](images/ansys/deformation.png)
 
 ## 3. Mesh convergence: why the fillets mattered
 
@@ -83,7 +83,7 @@ The peak doubles and keeps climbing: a sharp inside corner has, in theory,
 infinite stress, so the finer the mesh, the higher the number. That's a
 **singularity**, not a result.
 
-![The sharp V corner at 0.25 mm: 320 MPa and still rising](../images/ansys/sharp_corner_320MPa.png)
+![The sharp V corner at 0.25 mm: 320 MPa and still rising](images/ansys/sharp_corner_320MPa.png)
 
 **Second run: V filleted (3 mm).** The peak dropped to 144 MPa and moved to
 the step where the slim steering arm enters its wider root block, another
@@ -107,7 +107,7 @@ below the V fillet. Meanwhile the **maximum deformation stayed at 0.338 to
 only the stress at that one edge isn't, exactly as theory predicts for a
 singularity.
 
-![Convergence, last run: the peak at the sharp edge keeps rising](../images/ansys/convergence.png)
+![Convergence, last run: the peak at the sharp edge keeps rising](images/ansys/convergence.png)
 
 ## 4. The design stress
 
@@ -124,9 +124,9 @@ taken as **150 MPa (SF 3.4)**: the top of the fillet range, matching the
 144 to 145 MPa of the first two converged-looking loops and the 136 MPa hand
 calc.
 
-![Probes next to the singular edge](../images/ansys/stress_peak_probes.png)
+![Probes next to the singular edge](images/ansys/stress_peak_probes.png)
 
-![Mesh on a fillet](../images/ansys/mesh_closeup.png)
+![Mesh on a fillet](images/ansys/mesh_closeup.png)
 
 ## 5. Lessons learned
 

@@ -78,7 +78,7 @@ def test_mirror_trick_matches_a_real_right_corner(hp, steer):
 
 def test_baseline_is_slightly_anti_ackermann(steer):
     """The baseline's steering arm sits inboard of the kingpin with a front
-    rack, which gives a little anti-Ackermann. Documented in docs/full-breakdown/technical-guide.md."""
+    rack, which gives a little anti-Ackermann. Documented in the README."""
     s = sk.steering_summary(steer)
     assert -30 < s["ackermann_at_lock_pct"] < 0
     assert 15 < s["inner_lock_deg"] < 30
