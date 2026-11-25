@@ -140,7 +140,7 @@ def test_roll_centre_lines_meet_at_the_reported_point(poses):
 
 
 def test_optimised_design_compensates_camber_and_keeps_roll_centre_central():
-    """Numbers quoted in docs/full-breakdown/technical-guide.md for data/optimized_front.json."""
+    """Numbers quoted in the README for data/optimized_front.json."""
     opt = sk.load_hardpoints(OPTIMIZED)
     v = sk.VehicleParams.from_hardpoints(opt)
     s = sk.roll_summary(sk.roll_metrics(sk.roll_sweep(opt, 3.0, 0.5), v), v)
